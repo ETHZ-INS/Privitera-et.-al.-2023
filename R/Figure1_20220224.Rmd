@@ -26,7 +26,7 @@ source("BioStatsfunctions_LvZ.R")
 set.seed(123)
 sessionInfo()
 ```
-Load data
+Load data and build SEs
 
 ```{r}
 STR2d <- readRDS("../data/STR2.dHC.SE.rds")
@@ -34,10 +34,20 @@ STR2v <- readRDS("../data/STR2.vHC.SE.rds")
 STR3 <- readRDS("../data/STR3.vHC.SE.rds")
 
 STR2 <- cbind(STR2d,STR2v)
+STR2$SampleNumber <- NULL
+STR <- cbind(STR2,STR3)
+STR$Condition2[STR$Condition2 == "Saline-Ctrl"] <- "PBS-Control"
+STR$Condition2[STR$Condition2 == "Saline-Stress"] <- "PBS-Stress"
+STR$Condition2 <- droplevels(STR$Condition2)
+STR$Condition[STR$Condition == "Control"] <- "Homecage"
+STR <- dosvacor(STR, form = ~Condition2 + Experiment + Region, form0 = ~Experiment + Region)
 STR2 <- dosvacor(STR2, form = ~Condition + Injection, form0 = ~Region)
+
+
 STR2 <- STR2[,order(STR2$Region,STR2$Condition2)]
 STR3 <- STR3[,order(STR3$Injection,STR3$Condition,STR3$Sex)]
 
+  
 Results <- list()
 
 mincount <- 30
@@ -248,6 +258,36 @@ FigS1C <- ggplot() + geom_point(data = df_swvswpro,aes(index, sw), color = "blue
 
 ```
 
+### Ctrl-swim vs ctrl- yohimbine strength (FigS1D)
+
+This Figure shows the stength of the stress effect vs the yohimbine effect (combined hemispheres)
+
+
+```{r}
+vHC_sw <- Results[["STR2v_CtrlvsSwim"]]$table
+dHC_sw <- Results[["STR2d_CtrlvsSwim"]]$table
+vHC_yoh <- Results[["STR2v_CtrlvsYohimb"]]$table
+dHC_yoh <- Results[["STR2d_CtrlvsYohimb"]]$table
+
+#select genes that are expressed in all comparisons
+temp <- intersect(intersect(rownames(vHC_sw),rownames(dHC_sw)),intersect(rownames(vHC_yoh),rownames(dHC_yoh)))
+
+sw <- vHC_sw[temp,]
+sw$logFC <- (sw$logFC + dHC_sw[temp,"logFC"]) / 2
+
+yoh <- vHC_yoh[temp,]
+yoh$logFC <- (yoh$logFC + dHC_yoh[temp,"logFC"]) / 2
+
+df_swvsyoh <- data.frame(sw = sw$logFC,yoh = yoh$logFC)
+rownames(df_swvsyoh) <- rownames(yoh)
+df_swvsyoh <- na.omit(df_swvsyoh[sig_sw,])
+df_swvsyoh <- df_swvsyoh[order(df_swvsyoh$sw),]
+df_swvsyoh$index <- 1:nrow(df_swvsyoh)
+
+FigS1D <- ggplot() + geom_point(data = df_swvsyoh,aes(index, sw), color = "blue") + geom_point(data = df_swvsyoh,aes(index, yoh), color = "red") + theme_bw() + ylab("logFC") + scale_y_continuous(limits = c(-3,3)) 
+
+```
+
 ### Sotolol Experiment Heatmap (Fig1F)
 
 This figure shows genes that are stress responsive, but also have a significant interaction with propranolol (p adj for stress effect, p-value for interaction)
@@ -322,7 +362,84 @@ df2 <- data.frame(name = rownames(prop),
 df2 <- df2[order(df2$logFC.males),]
 df2$index <- 1:nrow(df2)
 
-Fig1G <- ggplot() + geom_point(data = df2,aes(index, logFC.males), color = "blue") + geom_point(data = df2,aes(index, logFC.females), color = "red") + theme_bw() + ylab("logFC")
+Fig1G <- ggplot() + 
+  geom_point(data = df2,aes(index, logFC.males), color = "blue") + 
+  geom_point(data = df2,aes(index, logFC.females), color = "red") + 
+  theme_bw() + 
+  ylab("logFC")
+```
+
+### Propranolol Genes of STR2 in STR2+STR3 (Figure S1E)
+
+Heatmap that shows the significant propranolol genes of STR2 in combined data of STR2 and STR3
+
+```{r}
+STR$Injection[STR$Injection == "Propanolol"] <- "Propranolol"
+STR$Injection[STR$Injection == "Saline"] <- "PBS"
+STR$Injection <- factor(STR$Injection, levels = c("PBS","Yohimbine","Propranolol","Prazosin","Sotalol"))
+STR$Injection[STR$Condition2 == "Saline-Yohimbine"] <- "Yohimbine"
+STR$Sex[STR$Sex == "Male"] <- "male"
+STR <- STR[,order(STR$Experiment, STR$Region, STR$Injection, STR$Condition, STR$Sex)]
+FigS1E <- sehm(STR, 
+     sig_int,
+     gaps_at = c("Experiment","Region"),
+     anno_columns = c("Experiment","Injection","Condition","Sex"),
+     do.scale = T, 
+     cluster_rows = T,
+     main = "Genes with Propranolol:Swim interaction", assay = "corrected",)
+```
+
+### Expression of Dio2 (Figure S1F)
+
+```{r}
+plotdat <- meltSE(STR,"Dio2")
+ 
+FigS1F <- ggplot(plotdat, aes(Injection, corrected, color = Condition)) + 
+  geom_boxplot(outlier.shape = NA) + 
+  geom_point(position = position_jitterdodge()) + 
+  facet_wrap(~Region +Experiment, scales = "free") + 
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+
+### Response strength STR3 (swim vs propranolol vs sotalol) (Figure S1G)
+
+This figure shows the stress responsive genes and their respective effect strength in PBS, Propranolol and Sotalol control vs swim comparisons
+
+```{r}
+STR3_contrasts <- dosvacor(STR3, form = ~Condition2)
+STR3_contrasts_design <- model.matrix(~STR3$Condition2 + STR3$SV1 + STR3$SV2 + STR3$SV3)
+
+y <- DGEList(counts=assays(STR3_contrasts)$counts)
+y <- calcNormFactors(y)
+y <- estimateDisp(y,STR3_contrasts_design)
+#filter out genes that are low expressed
+y <- y[filterByExpr(y, STR3_contrasts_design, min.count = mincount),]
+STR3_contrasts_fit <- glmQLFit(y,STR3_contrasts_design)
+
+Results[["STR3_contrasts_PBS_CtrlvsSwim"]] <- glmQLFTest(STR3_contrasts_fit, contrast = c(0,1,0,0,0,0,0,0,0))
+Results[["STR3_contrasts_Propranolol_CtrlvsSwim"]] <- glmQLFTest(STR3_contrasts_fit, contrast = c(0,0,-1,1,0,0,0,0,0))
+Results[["STR3_contrasts_Sotalol_CtrlvsSwim"]] <- glmQLFTest(STR3_contrasts_fit, contrast = c(0,0,0,0,-1,1,0,0,0))
+
+df_STR3_contrasts <- data.frame(PBS = Results[["STR3_contrasts_PBS_CtrlvsSwim"]]$table$logFC,
+                                Prop = Results[["STR3_contrasts_Propranolol_CtrlvsSwim"]]$table$logFC,
+                                Sot = Results[["STR3_contrasts_Sotalol_CtrlvsSwim"]]$table$logFC)
+rownames(df_STR3_contrasts) <- rownames(Results[["STR3_contrasts_PBS_CtrlvsSwim"]]$table)
+
+sig_str3_PBS_CvS <- rownames(topTags(Results[["STR3_contrasts_PBS_CtrlvsSwim"]], n = Inf, p.value = 0.05))
+
+df_STR3_contrasts <- df_STR3_contrasts[sig_str3_PBS_CvS,]
+df_STR3_contrasts <- df_STR3_contrasts[order(df_STR3_contrasts$PBS),]
+df_STR3_contrasts$index <- 1:nrow(df_STR3_contrasts)
+
+Fig1G <- ggplot() + 
+  geom_point(data = df_STR3_contrasts,aes(index, PBS), color = "blue") + 
+  geom_point(data = df_STR3_contrasts,aes(index, Prop), color = "red") + 
+  geom_point(data = df_STR3_contrasts,aes(index, Sot), color = "green2") + 
+  theme_bw() + 
+  ylab("logFC")
+
 ```
 
 
@@ -347,6 +464,9 @@ print(FigS1B)
 print(FigS1C)
 ```
 
+```{r, fig.width=4, fig.height=4}
+print(FigS1D)
+```
 
 ```{r, fig.width=6, fig.height=5}
 print(Fig1D)
@@ -358,6 +478,18 @@ print(Fig1E)
 
 ```{r, fig.width=6, fig.height=6}
 print(Fig1F)
+```
+
+```{r, fig.width=4, fig.height=4}
+print(Fig1G)
+```
+
+```{r, fig.width=6, fig.height=4}
+print(FigS1E)
+```
+
+```{r, fig.width=6, fig.height=3}
+print(FigS1F)
 ```
 
 ```{r, fig.width=4, fig.height=4}
@@ -387,6 +519,10 @@ pdf(file = "../Figures/FigS1C.pdf", width = 4, height = 4)
 print(FigS1C)
 dev.off()
 
+pdf(file = "../Figures/FigS1D.pdf", width = 4, height = 4)
+print(FigS1D)
+dev.off()
+
 pdf(file = "../Figures/Fig1D.pdf", width = 6, height = 5)
 print(Fig1D)
 dev.off()
@@ -397,6 +533,18 @@ dev.off()
 
 pdf(file = "../Figures/Fig1F.pdf", width = 6, height = 6)
 print(Fig1F)
+dev.off()
+
+pdf(file = "../Figures/Fig1G.pdf", width = 4, height = 4)
+print(Fig1G)
+dev.off()
+
+pdf(file = "../Figures/FigS1E.pdf", width = 6, height = 4)
+print(FigS1E)
+dev.off()
+
+pdf(file = "../Figures/FigS1F.pdf", width = 6, height = 3)
+print(FigS1F)
 dev.off()
 
 pdf(file = "../Figures/Fig1G.pdf", width = 4, height = 4)
