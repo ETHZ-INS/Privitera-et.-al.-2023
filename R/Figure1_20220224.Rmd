@@ -220,7 +220,7 @@ sw_pra$logFC <- (sw_pra$logFC + dHC_swpra[temp,"logFC"]) / 2
 
 df_swvswpra <- data.frame(sw = sw$logFC,sw_pra = sw_pra$logFC)
 rownames(df_swvswpra) <- rownames(sw_pra)
-df_swvswpra <- na.omit(df_swvswpra[sig_sw,])
+df_swvswpra <- na.omit(df_swvswpra[sig_str,])
 df_swvswpra <- df_swvswpra[order(df_swvswpra$sw),]
 df_swvswpra$index <- 1:nrow(df_swvswpra)
 
@@ -250,7 +250,7 @@ sw_pro$logFC <- (sw_pro$logFC + dHC_swpro[temp,"logFC"]) / 2
 
 df_swvswpro <- data.frame(sw = sw$logFC,sw_pro = sw_pro$logFC)
 rownames(df_swvswpro) <- rownames(sw_pro)
-df_swvswpro <- na.omit(df_swvswpro[sig_sw,])
+df_swvswpro <- na.omit(df_swvswpro[sig_str,])
 df_swvswpro <- df_swvswpro[order(df_swvswpro$sw),]
 df_swvswpro$index <- 1:nrow(df_swvswpro)
 
@@ -280,11 +280,25 @@ yoh$logFC <- (yoh$logFC + dHC_yoh[temp,"logFC"]) / 2
 
 df_swvsyoh <- data.frame(sw = sw$logFC,yoh = yoh$logFC)
 rownames(df_swvsyoh) <- rownames(yoh)
-df_swvsyoh <- na.omit(df_swvsyoh[sig_sw,])
+df_swvsyoh <- na.omit(df_swvsyoh[sig_str,])
 df_swvsyoh <- df_swvsyoh[order(df_swvsyoh$sw),]
 df_swvsyoh$index <- 1:nrow(df_swvsyoh)
 
 FigS1D <- ggplot() + geom_point(data = df_swvsyoh,aes(index, sw), color = "blue") + geom_point(data = df_swvsyoh,aes(index, yoh), color = "red") + theme_bw() + ylab("logFC") + scale_y_continuous(limits = c(-3,3)) 
+
+```
+
+### combined Ctrl-swim vs treatments strength (FigS1B-D)
+
+```{r}
+cmb <- intersect(intersect(rownames(df_swvsyoh),rownames(df_swvswpro)),rownames(df_swvswpra))
+ FigS1BD <- ggplot() + geom_point(data = df_swvsyoh[cmb,],aes(index, sw), color = "blue") + 
+   geom_point(data = df_swvsyoh[cmb,],aes(index, yoh), color = "red") + 
+   geom_point(data = df_swvswpro[cmb,],aes(index, sw_pro), color = "green") + 
+   geom_point(data = df_swvswpra[cmb,],aes(index, sw_pra), color = "orange") + 
+   theme_bw() + 
+   ylab("logFC") + 
+   scale_y_continuous(limits = c(-3,3)) 
 
 ```
 
@@ -466,6 +480,10 @@ print(FigS1C)
 print(FigS1D)
 ```
 
+```{r, fig.width=4, fig.height=4}
+print(FigS1BD)
+```
+
 ```{r, fig.width=6, fig.height=5}
 print(Fig1D)
 ```
@@ -490,9 +508,6 @@ print(FigS1E)
 print(FigS1F)
 ```
 
-```{r, fig.width=4, fig.height=4}
-print(Fig1G)
-```
 
 ## Export Figures
 
@@ -519,6 +534,10 @@ dev.off()
 
 pdf(file = "../Figures/FigS1D.pdf", width = 4, height = 4)
 print(FigS1D)
+dev.off()
+
+pdf(file = "../Figures/FigS1BD.pdf", width = 4, height = 4)
+print(FigS1BD)
 dev.off()
 
 pdf(file = "../Figures/Fig1D.pdf", width = 6, height = 5)
@@ -574,7 +593,7 @@ rowData(STR2)[["STR2d_CtrlvsPropr"]] <- Results$STR2d_CtrlvsPropr$table[rownames
 rowData(STR2)[["STR2d_CtrlvsYohimb"]] <- Results$STR2d_CtrlvsYohimb$table[rownames(STR2),]
 rowData(STR2)[["STR2d_CtrlvsPraz"]] <- Results$STR2d_CtrlvsPraz$table[rownames(STR2),]
 
-saveRDS(STR2,"../final_data/STR2_Complete.SE.Rds")
+saveRDS(STR2,"../final_data/STR2_Complete2.SE.Rds")
 
 rowData(STR3)[["STR3_FullModel"]] <- Results$STR3_FullModel$table[rownames(STR3),]
 rowData(STR3)[["STR3_SwimEffect"]] <- Results$STR3_SwimEffect$table[rownames(STR3),]

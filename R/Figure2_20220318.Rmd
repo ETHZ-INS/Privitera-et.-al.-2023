@@ -34,6 +34,7 @@ opto_vHC <- readRDS("../data/OptoTranscriptomics_Seq1Only.vHC.SE.rds")
 opto_dHC <- readRDS("../data/OptoTranscriptomics_Seq1Only.dHC.SE.rds")
 DREADD_vHC <- readRDS("../data/DREADDTranscriptomics.vHC.SE.rds")
 DREADD_dHC <- readRDS("../data/DREADDTranscriptomics.dHC.SE.rds")
+retro_opto <- readRDS("../data/OPTO9.SE.Rds")
 
 
 DREADD <- cbind(DREADD_vHC[intersect(rownames(DREADD_vHC),rownames(DREADD_dHC)),],DREADD_dHC[intersect(rownames(DREADD_vHC),rownames(DREADD_dHC)),])
@@ -202,8 +203,43 @@ p4 <- ggplot(pDREADD,aes(Virus, corrected, color = Virus)) +
 
 FigS2X <- plot_grid(p1,p2,p3,p4,nrow = 1,rel_widths = c(1,0.7,0.5,0.7))
 
+
+#plot genes by log rank
+
+df_NAgenes <- data.frame(rank = ord[order(ord)], index = 1:length(ord))
+df_NAgenes$lab <- rep(NA,nrow(df_NAgenes))
+df_NAgenes$lab[1:n] <- t
+FigS2X2 <- ggplot(df_NAgenes,aes(index, log10(rank), label = lab)) + geom_point() + theme_bw() + geom_text_repel()
 ```
 
+## NA responsive genes in retrograde opto (Fig 2L)
+
+```{r}
+retro_opto_CHR2pvsn <- retro_opto[,retro_opto$Group != "HC"]
+retro_opto_CHR2pvsn$Group <- droplevels(retro_opto_CHR2pvsn$Group)
+retro_opto_CHR2pvsn <- dosvacor(retro_opto_CHR2pvsn, form = ~Group)
+
+y <- DGEList(counts=assays(retro_opto_CHR2pvsn)$counts,group = retro_opto_CHR2pvsn$Group)
+y <- calcNormFactors(y)
+y <- estimateDisp(y)
+y <- y[filterByExpr(y,group = retro_opto_CHR2pvsn$Group, min.count = mincount),]
+Results[["retro_opto_CHR2pvsn"]] <- exactTest(y)
+
+pretro_opto <- meltSE(retro_opto_CHR2pvsn,t)
+
+stats <- Results[["retro_opto_CHR2pvsn"]]$table[t,]
+stats$FDR <- p.adjust(stats$PValue, method = "fdr")
+
+Fig2L <- ggplot(pretro_opto,aes(Group, logcpm, color = Group)) + 
+  geom_boxplot(outlier.shape = NA) + 
+  geom_point(position = position_jitterdodge()) + 
+  facet_wrap(~feature, scales = "free", nrow = 1) + 
+  theme_bw()  + theme(legend.position="bottom") + 
+  ylab("logcpm")+ 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+stats
+```
 
 ## Show Final Figures
 
@@ -215,10 +251,17 @@ print(Fig2B)
 print(Fig2H)
 ```
 
+```{r, fig.height= 3, fig.width=6}
+print(Fig2L)
+```
+
 ```{r, fig.height= 8, fig.width=10}
 print(FigS2X)
 ```
 
+```{r, fig.height= 4, fig.width=4}
+print(FigS2X2)
+```
 
 ## Export Figures
 
@@ -231,8 +274,16 @@ pdf(file = "../Figures/Fig2H.pdf", width = 6, height = 4)
 print(Fig2H)
 dev.off()
 
+pdf(file = "../Figures/Fig2L.pdf", width = 6, height = 3)
+print(Fig2L)
+dev.off()
+
 pdf(file = "../Figures/FigS2X.pdf", width = 10, height = 8)
 print(FigS2X)
+dev.off()
+
+pdf(file = "../Figures/FigS2X2.pdf", width = 4, height = 4)
+print(FigS2X2)
 dev.off()
 
 ```
