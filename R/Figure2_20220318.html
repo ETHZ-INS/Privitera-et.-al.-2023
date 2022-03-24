@@ -878,13 +878,30 @@ print(FigS2X2)</code></pre>
 </div>
 <div id="create-final-data-frames-containing-corrected-expression-and-results-data-as-single-se-file" class="section level2">
 <h2>Create final data frames (containing corrected expression and Results data as single SE file)</h2>
-<pre class="r"><code>rowData(opto_vHC)[[&quot;opto_vHC_45min&quot;]] &lt;- Results$opto_vHC_45min$table[rownames(opto_vHC),]
-rowData(opto_vHC)[[&quot;opto_vHC_1h30min&quot;]] &lt;- Results$opto_vHC_1h30min$table[rownames(opto_vHC),]
+<pre class="r"><code>for(i in names(Results)){
+  Results[[i]]$table$FDR &lt;- p.adjust(Results[[i]]$table$PValue, method = &quot;fdr&quot;)
+}
+
+rowData(opto_vHC)$DEA.vHC_45min &lt;- Results$opto_vHC_45min$table[rownames(opto_vHC),]
+attr(rowData(opto_vHC)$DEA.vHC_45min, &quot;description&quot;) &lt;- &quot;two group analysis of ChR2 vs control virus analysis after 45min&quot;
+
+rowData(opto_vHC)$DEA.vHC_1h30min &lt;- Results$opto_vHC_1h30min$table[rownames(opto_vHC),]
+attr(rowData(opto_vHC)$DEA.vHC_1h30min, &quot;description&quot;) &lt;- &quot;two group analysis of ChR2 vs control virus analysis after 1h30min&quot;
+
+metadata(opto_vHC)$default_view &lt;- list(assay = &quot;corrected&quot;, groupvar = &quot;TimePoint&quot;, colvar = &quot;Virus&quot;)
+metadata(opto_vHC)$description &lt;- &quot;In this experiment the vHC transcriptome of animals in which LC was activated optogenetically 45min or 1h30min prior to sacrifice is tested&quot;
 
 saveRDS(opto_vHC, &quot;../final_data/Opto_Complete.Rds&quot;)
 
-rowData(DREADD)[[&quot;DREADD_vHC&quot;]] &lt;- Results$DREADD_vHC$table[rownames(DREADD),]
-rowData(DREADD)[[&quot;DREADD_vHC&quot;]] &lt;- Results$DREADD_dHC$table[rownames(DREADD),]
+rowData(DREADD)$DEA.vHC &lt;- Results$DREADD_vHC$table[rownames(DREADD),]
+attr(rowData(DREADD)$DEA.vHC, &quot;description&quot;) &lt;- &quot;two group analysis of hM3Dq vs control virus analysis after 45min in vHC&quot;
+
+rowData(DREADD)$DEA.dHC &lt;- Results$DREADD_dHC$table[rownames(DREADD),]
+attr(rowData(DREADD)$DEA.dHC, &quot;description&quot;) &lt;- &quot;two group analysis of hM3Dq vs control virus analysis after 45min in dHC&quot;
+
+metadata(DREADD)$default_view &lt;- list(assay = &quot;corrected&quot;, gridvar = &quot;Region&quot;, groupvar = &quot;Virus&quot;, colvar = &quot;Virus&quot;)
+metadata(DREADD)$description &lt;- &quot;In this experiment the vHC and dHC transcriptome of animals in which LC was activated chemogenetically 45min prior to sacrifice is tested&quot;
+
 saveRDS(DREADD, &quot;../final_data/DREADD_Complete.Rds&quot;)</code></pre>
 </div>
 </div>
