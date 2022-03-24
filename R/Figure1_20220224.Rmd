@@ -569,42 +569,110 @@ print(Fig1G)
 dev.off()
 ```
 
-## Create final data frames (containing corrected expression and Results data as single SE file)
+## Create final data frames (containing corrected expression and Results data as single SE file, compatible with tinySEV)
+
 
 ```{r}
 rowData(STR2)$Sig_vHC <- NULL
 rowData(STR2)$Sig_dHC <- NULL
-rowData(STR2)[["STR2v_FullModel"]] <- Results$STR2v_FullModel$table[rownames(STR2),]
-rowData(STR2)[["STR2d_FullModel"]] <- Results$STR2d_FullModel$table[rownames(STR2),]
-rowData(STR2)[["STR2d_StressEffect"]] <- Results$STR2d_StressEffect$table[rownames(STR2),]
-rowData(STR2)[["STR2v_StressEffect"]] <- Results$STR2v_StressEffect$table[rownames(STR2),]
-rowData(STR2)[["STR2v_CtrlvsSwim"]] <- Results$STR2v_CtrlvsSwim$table[rownames(STR2),]
-rowData(STR2)[["STR2d_CtrlvsSwim"]] <- Results$STR2d_CtrlvsSwim$table[rownames(STR2),]
-rowData(STR2)[["STR2v_SwimvsYohimb"]] <- Results$STR2v_SwimvsYohimb$table[rownames(STR2),]
-rowData(STR2)[["STR2v_StressvsPraz"]] <- Results$STR2v_StressvsPraz$table[rownames(STR2),]
-rowData(STR2)[["STR2v_StressvsPropr"]] <- Results$STR2v_StressvsPropr$table[rownames(STR2),]
-rowData(STR2)[["STR2v_CtrlvsPropr"]] <- Results$STR2v_CtrlvsPropr$table[rownames(STR2),]
-rowData(STR2)[["STR2v_CtrlvsYohimb"]] <- Results$STR2v_CtrlvsYohimb$table[rownames(STR2),]
-rowData(STR2)[["STR2v_CtrlvsPraz"]] <- Results$STR2v_CtrlvsPraz$table[rownames(STR2),]
-rowData(STR2)[["STR2d_SwimvsYohimb"]] <- Results$STR2d_SwimvsYohimb$table[rownames(STR2),]
-rowData(STR2)[["STR2d_StressvsPraz"]] <- Results$STR2d_StressvsPraz$table[rownames(STR2),]
-rowData(STR2)[["STR2d_StressvsPropr"]] <- Results$STR2d_StressvsPropr$table[rownames(STR2),]
-rowData(STR2)[["STR2d_CtrlvsPropr"]] <- Results$STR2d_CtrlvsPropr$table[rownames(STR2),]
-rowData(STR2)[["STR2d_CtrlvsYohimb"]] <- Results$STR2d_CtrlvsYohimb$table[rownames(STR2),]
-rowData(STR2)[["STR2d_CtrlvsPraz"]] <- Results$STR2d_CtrlvsPraz$table[rownames(STR2),]
 
-saveRDS(STR2,"../final_data/STR2_Complete2.SE.Rds")
+for(i in names(Results)){
+  Results[[i]]$table$FDR <- p.adjust(Results[[i]]$table$PValue, method = "fdr")
+}
 
-rowData(STR3)[["STR3_FullModel"]] <- Results$STR3_FullModel$table[rownames(STR3),]
-rowData(STR3)[["STR3_SwimEffect"]] <- Results$STR3_SwimEffect$table[rownames(STR3),]
-rowData(STR3)[["STR3_InteractionPropranolol"]] <- Results$STR3_InteractionPropranolol$table[rownames(STR3),]
-rowData(STR3)[["STR3_InteractionSotolol"]] <- Results$STR3_InteractionSotolol$table[rownames(STR3),]
-rowData(STR3)[["STR3_m_InteractionPropranolol"]] <- Results$STR3_m_InteractionPropranolol$table[rownames(STR3),]
-rowData(STR3)[["STR3_f_InteractionPropranolol"]] <- Results$STR3_f_InteractionPropranolol$table[rownames(STR3),]
-rowData(STR3)[["STR3_contrasts_PBS_CtrlvsSwim"]] <- Results$STR3_contrasts_PBS_CtrlvsSwim$table[rownames(STR3),]
-rowData(STR3)[["STR3_contrasts_Propranolol_CtrlvsSwim"]] <- Results$STR3_contrasts_Propranolol_CtrlvsSwim$table[rownames(STR3),]
-rowData(STR3)[["STR3_contrasts_Sotalol_CtrlvsSwim"]] <- Results$STR3_contrasts_Sotalol_CtrlvsSwim$table[rownames(STR3),]
+rowData(STR2)$DEA.vHC_FullModel <- Results$STR2v_FullModel$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.vHC_FullModel, "description") <- "Full model analysis of vHC samples that tests if a gene is in general differentially expressed accross all 5 groups"
+
+rowData(STR2)$DEA.dHC_FullModel<- Results$STR2d_FullModel$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.dHC_FullModel, "description") <- "Full model analysis of dHC samples that tests if a gene is in general differentially expressed accross all 5 groups"
+
+rowData(STR2)$DEA.dHC_StressEffect<- Results$STR2d_StressEffect$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.dHC_StressEffect, "description") <- "Analysis that tests if a gene is differentially expressed after stress (either swim or yohimbine injection) vs ctrl in the dHC"
+
+rowData(STR2)$DEA.vHC_StressEffect <- Results$STR2v_StressEffect$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.vHC_StressEffect, "description") <- "Analysis that tests if a gene is differentially expressed after stress (either swim or yohimbine injection) vs ctrl in the vHC"
+
+rowData(STR2)$DEA.vHC_CtrlvsSwim <- Results$STR2v_CtrlvsSwim$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.vHC_CtrlvsSwim, "description") <- "Contrast analysis that tests if a gene is differentially expressed in swim vs control animals in the vHC"
+
+rowData(STR2)$DEA.dHC_CtrlvsSwim <- Results$STR2d_CtrlvsSwim$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.dHC_CtrlvsSwim, "description") <- "Contrast analysis that tests if a gene is differentially expressed in swim vs control animals in the dHC"
+
+rowData(STR2)$DEA.vHC_SwimvsYohimb <- Results$STR2v_SwimvsYohimb$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.vHC_SwimvsYohimb, "description") <- "Contrast analysis that tests if a gene is differentially expressed in swim vs yohimbine animals in the vHC"
+
+rowData(STR2)$DEA.vHC_StressvsPraz <- Results$STR2v_StressvsPraz$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.vHC_StressvsPraz, "description") <- "Contrast analysis that tests if a gene is differentially expressed in stress (swim and yohimbin) vs swim + prazosin animals in the vHC"
+
+rowData(STR2)$DEA.vHC_StressvsPropr <- Results$STR2v_StressvsPropr$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.vHC_StressvsPropr, "description") <- "Contrast analysis that tests if a gene is differentially expressed in stress (swim and yohimbin) vs swim + propranolol animals in the vHC"
+
+rowData(STR2)$DEA.vHC_CtrlvsPropr <- Results$STR2v_CtrlvsPropr$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.vHC_CtrlvsPropr, "description") <- "Contrast analysis that tests if a gene is differentially expressed in ctrl vs swim + propranolol animals in the vHC"
+
+rowData(STR2)$DEA.vHC_CtrlvsYohimb <- Results$STR2v_CtrlvsYohimb$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.vHC_CtrlvsYohimb, "description") <- "Contrast analysis that tests if a gene is differentially expressed in ctrl vs yohimbine animals in the vHC"
+
+rowData(STR2)$DEA.vHC_CtrlvsPraz <- Results$STR2v_CtrlvsPraz$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.vHC_CtrlvsPraz, "description") <- "Contrast analysis that tests if a gene is differentially expressed in ctrl vs swim + prazosin animals in the vHC"
+
+rowData(STR2)$DEA.dHC_SwimvsYohimb <- Results$STR2d_SwimvsYohimb$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.dHC_SwimvsYohimb, "description") <- "Contrast analysis that tests if a gene is differentially expressed in swim vs yohimbine animals in the dHC"
+
+
+rowData(STR2)$DEA.dHC_StressvsPraz <- Results$STR2d_StressvsPraz$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.dHC_StressvsPraz, "description") <- "Contrast analysis that tests if a gene is differentially expressed in stress (swim and yohimbin) vs swim + prazosin animals in the dHC"
+
+rowData(STR2)$DEA.dHC_StressvsPropr <- Results$STR2d_StressvsPropr$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.dHC_StressvsPropr, "description") <- "Contrast analysis that tests if a gene is differentially expressed in stress (swim and yohimbin) vs swim + propranolol animals in the dHC"
+
+rowData(STR2)$DEA.dHC_CtrlvsPropr <- Results$STR2d_CtrlvsPropr$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.dHC_CtrlvsPropr, "description") <- "Contrast analysis that tests if a gene is differentially expressed in ctrl vs swim + propranolol animals in the dHC"
+
+rowData(STR2)$DEA.dHC_CtrlvsYohimb <- Results$STR2d_CtrlvsYohimb$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.dHC_CtrlvsYohimb, "description") <- "Contrast analysis that tests if a gene is differentially expressed in ctrl vs yohimbine animals in the dHC"
+
+rowData(STR2)$DEA.dHC_CtrlvsPraz <- Results$STR2d_CtrlvsPraz$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.dHC_CtrlvsPraz, "description") <- "Contrast analysis that tests if a gene is differentially expressed in ctrl vs swim + prazosin animals in the dHC"
+
+metadata(STR2)$default_view <- list(assay = "corrected", groupvar = "Injection", colvar = "Condition", gridvar = "Region")
+metadata(STR2)$description <- "In this experiment the effect of pharmacological noradrenaline (NA) interventions on the transcriptomic acute stress response is assessed. 5 groups are present in this dataset. saline - control, saline - swim, yohimbin, propranolol - swim, prazosin - swim. The standard swim response is captured by the saline - swim group. The yohimbin group is an acute injection of yohimbin, an alpha-2 adrenergic antagonist that increases NA release of the LC in the hippocampus. the propranolol - swim group combines propranolol (a beta adrenergic receptor blocker) with acute swim stress. the prazosin - swim group comibnes prazosin (an alpha adrenergic receptor blocker) with acute swim stress. swim stress and yohimbine are administered 45min prior to sacrifice. for each animal vHC and dHC samples were collected and analyzed independently within these two regions"
+
+
+saveRDS(STR2,"../final_data/STR2_Complete.SE.Rds")
+
+
+rowData(STR3)$DEA.FullModel <- Results$STR3_FullModel$table[rownames(STR3),]
+attr(rowData(STR3)$DEA.FullModel, "description") <- "Analysis of the full model analysis swim * injection. Tests if a gene is in general variable across these variables"
+
+rowData(STR3)$DEA.SwimEffect <- Results$STR3_SwimEffect$table[rownames(STR3),]
+attr(rowData(STR3)$DEA.SwimEffect, "description") <- "Analysis of the swim coefficient of the swim * injection analysis. Tests if a gene is swim stress responsive"
+
+rowData(STR3)$DEA.InteractionPropranolol <- Results$STR3_InteractionPropranolol$table[rownames(STR3),]
+attr(rowData(STR3)$DEA.InteractionPropranolol, "description") <- "Analysis of the swim:propranolol interaction of the swim * injection analysis. Tests if a gene reacts differently to swim when propranolol is administred"
+
+rowData(STR3)$DEA.InteractionSotolol <- Results$STR3_InteractionSotolol$table[rownames(STR3),]
+attr(rowData(STR3)$DEA.InteractionSotolol, "description") <- "Analysis of the swim:sotalol interaction of the swim * injection analysis. Tests if a gene reacts differently to swim when sotalol is administred"
+
+rowData(STR3)$DEA.male_InteractionPropranolol <- Results$STR3_m_InteractionPropranolol$table[rownames(STR3),]
+attr(rowData(STR3)$DEA.male_InteractionPropranolol, "description") <- "Analysis of the swim:propranolol interaction of the swim * injection analysis in males only. Tests if a gene reacts differently to swim when propranolol is administred"
+
+rowData(STR3)$DEA.female_InteractionPropranolol <- Results$STR3_f_InteractionPropranolol$table[rownames(STR3),]
+attr(rowData(STR3)$DEA.female_InteractionPropranolol, "description") <- "Analysis of the swim:propranolol interaction of the swim * injection analysis in females only. Tests if a gene reacts differently to swim when propranolol is administred"
+
+rowData(STR3)$DEA.PBS_CtrlvsSwim <- Results$STR3_contrasts_PBS_CtrlvsSwim$table[rownames(STR3),]
+attr(rowData(STR3)$DEA.PBS_CtrlvsSwim, "description") <- "Contrast analysis of swim vs control in PBS injected animals"
+
+rowData(STR3)$DEA.Propranolol_CtrlvsSwim <- Results$STR3_contrasts_Propranolol_CtrlvsSwim$table[rownames(STR3),]
+attr(rowData(STR3)$DEA.Propranolol_CtrlvsSwim, "description") <- "Contrast analysis of swim vs control in Propranolol injected animals"
+
+rowData(STR3)$DEA.Sotalol_CtrlvsSwim <- Results$STR3_contrasts_Sotalol_CtrlvsSwim$table[rownames(STR3),]
+attr(rowData(STR3)$DEA.Sotalol_CtrlvsSwim, "description") <- "Contrast analysis of swim vs control in Sotalol injected animals"
+
+metadata(STR3)$default_view <- list(assay = "corrected", groupvar = "Injection", colvar = "Condition")
+metadata(STR3)$description <- "In this experiment the effect of pharmacological noradrenaline (NA) interventions on the transcriptomic acute stress response is assessed. Two independent variables are included, Condition (swim or control) and Injection (PBS, propranolo, sotalol). propranolol is a beta adrenergic blocker that acts in the periphery and in the CNS whereas sotalol is a beta adrenergic blocker that only acts in the periphery. Analysis was done with an interactive model Condition * Injection, that tests for swim effect and swim:injection interactions"
+
 
 saveRDS(STR3,"../final_data/STR3_Complete.SE.Rds")
-
 ```
+

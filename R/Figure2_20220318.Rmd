@@ -292,12 +292,39 @@ dev.off()
 ## Create final data frames (containing corrected expression and Results data as single SE file)
 
 ```{r}
-rowData(opto_vHC)[["opto_vHC_45min"]] <- Results$opto_vHC_45min$table[rownames(opto_vHC),]
-rowData(opto_vHC)[["opto_vHC_1h30min"]] <- Results$opto_vHC_1h30min$table[rownames(opto_vHC),]
+
+for(i in names(Results)){
+  Results[[i]]$table$FDR <- p.adjust(Results[[i]]$table$PValue, method = "fdr")
+}
+
+rowData(opto_vHC)$DEA.vHC_45min <- Results$opto_vHC_45min$table[rownames(opto_vHC),]
+attr(rowData(opto_vHC)$DEA.vHC_45min, "description") <- "two group analysis of ChR2 vs control virus analysis after 45min"
+
+rowData(opto_vHC)$DEA.vHC_1h30min <- Results$opto_vHC_1h30min$table[rownames(opto_vHC),]
+attr(rowData(opto_vHC)$DEA.vHC_1h30min, "description") <- "two group analysis of ChR2 vs control virus analysis after 1h30min"
+
+metadata(opto_vHC)$default_view <- list(assay = "corrected", groupvar = "TimePoint", colvar = "Virus")
+metadata(opto_vHC)$description <- "In this experiment the vHC transcriptome of animals in which LC was activated optogenetically 45min or 1h30min prior to sacrifice is tested"
 
 saveRDS(opto_vHC, "../final_data/Opto_Complete.Rds")
 
-rowData(DREADD)[["DREADD_vHC"]] <- Results$DREADD_vHC$table[rownames(DREADD),]
-rowData(DREADD)[["DREADD_vHC"]] <- Results$DREADD_dHC$table[rownames(DREADD),]
+rowData(DREADD)$DEA.vHC <- Results$DREADD_vHC$table[rownames(DREADD),]
+attr(rowData(DREADD)$DEA.vHC, "description") <- "two group analysis of hM3Dq vs control virus analysis after 45min in vHC"
+
+rowData(DREADD)$DEA.dHC <- Results$DREADD_dHC$table[rownames(DREADD),]
+attr(rowData(DREADD)$DEA.dHC, "description") <- "two group analysis of hM3Dq vs control virus analysis after 45min in dHC"
+
+metadata(DREADD)$default_view <- list(assay = "corrected", gridvar = "Region", groupvar = "Virus", colvar = "Virus")
+metadata(DREADD)$description <- "In this experiment the vHC and dHC transcriptome of animals in which LC was activated chemogenetically 45min prior to sacrifice is tested"
+
 saveRDS(DREADD, "../final_data/DREADD_Complete.Rds")
+
+rowData(retro_opto_CHR2pvsn)$DEA.ChR2vsControl <- Results$retro_opto_CHR2pvsn$table[rownames(retro_opto_CHR2pvsn),]
+attr(rowData(retro_opto_CHR2pvsn)$DEA.ChR2vsControl, "description") <- "two group analysis of ChR2 vs control retro virus analysis after 45min in vHC"
+
+metadata(retro_opto_CHR2pvsn)$default_view <- list(assay = "corrected", groupvar = "Group", colvar = "Group")
+metadata(retro_opto_CHR2pvsn)$description <- "In this experiment the vHC transcriptome of animals in which LC neurons that project to the hippocampus were activated optogenetically 45min prior to sacrifice is assessed"
+
+saveRDS(retro_opto_CHR2pvsn, "../final_data/RetroOpto_Complete.Rds")
+
 ```
