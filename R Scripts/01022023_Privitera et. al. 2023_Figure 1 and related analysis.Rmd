@@ -1,0 +1,917 @@
+---
+title: "Privitera et. al 2023- Analysis of Figure 1 and related Figures"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+required libraries
+
+```{r, echo=FALSE}
+library(edgeR)
+library(SummarizedExperiment)
+library(SEtools)
+library(plgINS)
+library(ggplot2)
+library(DESeq2)
+library(sva)
+library(sechm)
+library(cowplot)
+source("../19122022_Figure1_Analysis/Functions.R")
+set.seed(123)
+sessionInfo()
+```
+
+# Load SE data
+
+```{r}
+STR2d <- readRDS("../19122022_Figure1_Analysis/Data/STR2.dHC.SE.rds")
+STR2v <- readRDS("../19122022_Figure1_Analysis/Data/STR2.vHC.SE.rds")
+STR3 <- readRDS("../19122022_Figure1_Analysis/Data/STR3.vHC.SE.rds")
+
+STR2 <- cbind(STR2d,STR2v)
+STR2$SampleNumber <- NULL
+STR <- cbind(STR2,STR3)
+STR$Condition2[STR$Condition2 == "Saline-Ctrl"] <- "PBS-Control"
+STR$Condition2[STR$Condition2 == "Saline-Stress"] <- "PBS-Stress"
+STR$Condition2 <- droplevels(STR$Condition2)
+STR$Condition[STR$Condition == "Control"] <- "Homecage"
+STR <- dosvacor(STR, form = ~Condition2 + Experiment + Region, form0 = ~Experiment + Region)
+STR2 <- dosvacor(STR2, form = ~Condition + Injection, form0 = ~Region)
+
+
+STR2 <- STR2[,order(STR2$Region,STR2$Condition2)]
+STR3 <- STR3[,order(STR3$Injection,STR3$Condition,STR3$Sex)]
+
+  
+Results <- list()
+
+mincount <- 30
+```
+
+### Figure 1d-e: Analysis of dHC and vHC transcriptome
+
+```{r}
+#dHC
+STR2d$Condition2 <- droplevels(STR2d$Condition2)
+STR2d <- dosvacor(STR2d,form = ~Condition2)
+STR2d <- STR2d[,order(STR2d$Injection,STR2d$Condition)]
+
+STR2d_design <- model.matrix(~STR2d$Condition2 + STR2d$SV1 + STR2d$SV2 + STR2d$SV3 + STR2d$SV4 + STR2d$SV5)
+
+y <- DGEList(counts=assays(STR2d)$counts)
+y <- calcNormFactors(y)
+y <- estimateDisp(y,STR2d_design)
+#filter out genes that are low expressed
+y <- y[filterByExpr(y, STR2d_design, min.count = mincount),]
+STR2d_fit <- glmQLFit(y,STR2d_design)
+
+#vHC
+STR2v$Condition2 <- droplevels(STR2v$Condition2)
+STR2v <- dosvacor(STR2v,form = ~Condition2)
+STR2v <- STR2v[,order(STR2v$Injection,STR2v$Condition)]
+
+STR2v_design <- model.matrix(~STR2v$Condition2 + STR2v$SV1 + STR2v$SV2 + STR2v$SV3)
+
+y <- DGEList(counts=assays(STR2v)$counts)
+y <- calcNormFactors(y)
+y <- estimateDisp(y,STR2v_design)
+#filter out genes that are low expressed
+y <- y[filterByExpr(y, STR2v_design, min.count = mincount),]
+STR2v_fit <- glmQLFit(y,STR2v_design)
+```
+
+### Figure 1d: Stress responsive genes in dHC and vHC
+
+The this Figure will show all genes that are stress responsive in dHC or vHC as one single Heatmap
+
+```{r, fig.width=6, fig.height=6}
+Results[["STR2d_FullModel"]] <- glmQLFTest(STR2d_fit, colnames(STR2d_design)[2:5])
+Results[["STR2v_FullModel"]] <- glmQLFTest(STR2v_fit, colnames(STR2v_design)[2:5])
+Results[["STR2d_StressEffect"]] <- glmQLFTest(STR2d_fit, contrast = c(0,1,1,0,0,0,0,0,0,0))
+Results[["STR2v_StressEffect"]] <- glmQLFTest(STR2v_fit, contrast = c(0,1,1,0,0,0,0,0))
+Results[["STR2v_CtrlvsSwim"]] <- glmQLFTest(STR2v_fit, contrast = c(0,1,0,0,0,0,0,0))
+Results[["STR2d_CtrlvsSwim"]] <- glmQLFTest(STR2d_fit, contrast = c(0,1,0,0,0,0,0,0,0,0))
+
+
+
+#Genes that are significant in either dHC or vHC
+sig_str <- union(rownames(topTags(Results[["STR2d_StressEffect"]], p = 0.05, n = Inf)),rownames(topTags(Results[["STR2v_StressEffect"]], p = 0.05, n = Inf)))
+sig_sw <- union(rownames(topTags(Results[["STR2v_CtrlvsSwim"]], p = 0.05, n = Inf)),rownames(topTags(Results[["STR2d_CtrlvsSwim"]], p = 0.05, n = Inf)))
+sig <- union(rownames(topTags(Results[["STR2d_FullModel"]], p = 0.05, n = Inf)),rownames(topTags(Results[["STR2v_FullModel"]], p = 0.05, n = Inf)))
+
+STR2p <- STR2[,STR2$Condition != "Yohimbine"]
+
+#Adjust heatmap colors
+metadata(STR2p)$hmcols <- c("royalblue","white","firebrick4")
+ancols <- list(Condition=c( Homecage="peachpuff",
+                             Stress="indianred1"),
+               Injection=c( Saline="lightsteelblue1",
+                             Prazosin="#74ADD1",
+                             Propanolol="steelblue"),
+               Region=c(dHC="grey19", vHC="sandybrown"))
+metadata(STR2p)$anno_colors <- ancols
+
+
+#Plot Heatmap
+Fig1d <- sechm(STR2p, 
+     sig_sw, 
+     gaps_at = c("Region","Injection"), 
+     top_annotation = c("Region","Injection","Condition"),
+     sortRowsOn = which(STR2p$Injection == "Propanolol" | STR2p$Condition == "Homecage"),
+     do.scale = T, 
+     column_title = "Swim responsive genes", assay = "corrected",
+     show_row_dend = FALSE)
+     
+     #main = "Swim responsive genes", assay = "corrected",show_row_dend = FALSE)
+
+
+print(Fig1d)
+
+
+```
+
+### Contrast analysis (Propranolol effects and Prazosin effects)
+
+This Figure will show Volcanoplots for contrast analyses in dHC and vHC independently
+Contrasts are shown for 
+
+Supplementary Figure:
+        - Swim effects (Swim  vs Ctrl)
+        - Stress (swim + yohimbine) vs Prazosine
+        - Stress (swim + yohimbine) vs Propranolol
+
+```{r}
+Results[["STR2v_SwimvsYohimb"]] <- glmQLFTest(STR2v_fit, contrast = c(0,-1,1,0,0,0,0,0))
+Results[["STR2v_StressvsPraz"]] <- glmQLFTest(STR2v_fit, contrast = c(0,-1,-1,0,1,0,0,0))
+Results[["STR2v_StressvsPropr"]] <- glmQLFTest(STR2v_fit, contrast = c(0,-1,-1,1,0,0,0,0))
+Results[["STR2v_CtrlvsPropr"]] <- glmQLFTest(STR2v_fit, contrast = c(0,0,0,1,0,0,0,0))
+Results[["STR2v_CtrlvsYohimb"]] <- glmQLFTest(STR2v_fit, contrast = c(0,0,1,0,0,0,0,0))
+Results[["STR2v_CtrlvsPraz"]] <- glmQLFTest(STR2v_fit, contrast = c(0,0,0,0,1,0,0,0))
+
+Results[["STR2d_SwimvsYohimb"]] <- glmQLFTest(STR2d_fit, contrast = c(0,-1,1,0,0,0,0,0,0,0))
+Results[["STR2d_StressvsPraz"]] <- glmQLFTest(STR2d_fit, contrast = c(0,-1,-1,0,1,0,0,0,0,0))
+Results[["STR2d_StressvsPropr"]] <- glmQLFTest(STR2d_fit, contrast = c(0,-1,-1,1,0,0,0,0,0,0))
+Results[["STR2d_CtrlvsPropr"]] <- glmQLFTest(STR2d_fit, contrast = c(0,0,0,1,0,0,0,0,0,0))
+Results[["STR2d_CtrlvsYohimb"]] <- glmQLFTest(STR2d_fit, contrast = c(0,0,1,0,0,0,0,0,0,0))
+Results[["STR2d_CtrlvsPraz"]] <- glmQLFTest(STR2d_fit, contrast = c(0,0,0,0,1,0,0,0,0,0))
+```
+### Figure 1e: Propranolol Responsive Genes
+
+This figure shows a heatmap of all genes that have a significant stress vs stress + propranolol difference in vHC or dHC
+
+```{r}
+#Here we produce a combined heatmap of genes with significant interaction, either in vHC or dHC
+sig_int <- unique(rownames(topTags(Results[["STR2d_StressvsPropr"]],p = 0.05, n = Inf)),rownames(topTags(Results[["STR2v_StressvsPropr"]],p = 0.05, n = Inf)))
+rowData(STR2p)$Sig_vHC <- FALSE
+rowData(STR2p)$Sig_vHC[match(rownames(topTags(Results[["STR2v_StressvsPropr"]],p = 0.05, n = Inf)),rownames(STR2))] <- TRUE
+rowData(STR2p)$Sig_dHC <- FALSE
+rowData(STR2p)$Sig_dHC[match(rownames(topTags(Results[["STR2d_StressvsPropr"]],p = 0.05, n = Inf)),rownames(STR2))] <- TRUE
+
+Fig1e <- sechm(STR2p, 
+     sig_int, 
+     gaps_at = c("Region","Injection"), 
+     top_annotation = c("Region","Injection","Condition"),
+     left_annotation = c("Sig_vHC","Sig_dHC"),
+     do.scale = T, 
+     cluster_rows = T,
+     column_title = "Significant Propranolol effects", assay = "corrected", 
+     show_row_dend = FALSE)
+Fig1e
+```
+
+### Figure 1f: Propranolol response strength vHC vs dHC
+
+This figure shows the strength of the stress vs stress + propranolol in vHC vs dHC
+
+```{r}
+vHC <- Results[["STR2v_StressvsPropr"]]$table
+dHC <- Results[["STR2d_StressvsPropr"]]$table
+
+df <- data.frame(gene = sig_int ,vHC = vHC[sig_int,"logFC"], dHC = dHC[sig_int,"logFC"])
+df <- df[order(df$vHC),]
+df$index <- 1:nrow(df)
+
+Fig1f <- ggplot() + 
+  geom_point(data = df,aes(index, vHC), color = "sandybrown") + 
+  geom_point(data = df,aes(index, dHC), color = "grey19") + 
+  scale_y_continuous(limits = c(-3,3)) + 
+  theme_light()+
+  theme(panel.grid = element_line(linetype="dashed"), strip.background = element_rect(fill = "grey18"),legend.title = element_text(colour = "grey18", size = 10, face = "bold")) + 
+  ylab("logFC") +
+  ggtitle("Propranolol response")
+
+Fig1f
+```
+### Figure 1h: Proper design Experiment
+
+This figure shows genes that are stress responsive, but also have a significant interaction with propranolol (p adj for stress effect, p-value for interaction)
+
+```{r}
+STR3 <- dosvacor(STR3, form = ~Condition * Injection)
+
+
+STR3_design <- model.matrix(~STR3$Condition * STR3$Injection + STR3$SV1 + STR3$SV2 + STR3$SV3)
+
+y <- DGEList(counts=assays(STR3)$counts)
+y <- calcNormFactors(y)
+y <- estimateDisp(y,STR3_design)
+#filter out genes that are low expressed
+y <- y[filterByExpr(y, STR3_design, min.count = mincount),]
+STR3_fit <- glmQLFit(y,STR3_design)
+
+Results[["STR3_FullModel"]] <- glmQLFTest(STR3_fit, colnames(STR3_design)[c(2:4,8,9)])
+Results[["STR3_SwimEffect"]] <- glmQLFTest(STR3_fit, colnames(STR3_design)[2])
+Results[["STR3_InteractionPropranolol"]] <- glmQLFTest(STR3_fit, colnames(STR3_design)[8])
+Results[["STR3_InteractionPropranolol_stagewise"]] <- glmQLFTest(STR3_fit[rownames(topTags(Results[["STR3_SwimEffect"]], p = 0.05, n = Inf)),], colnames(STR3_design)[8])
+
+sig_str3 <- rownames(topTags(Results[["STR3_FullModel"]],p = 0.05, n = Inf))
+sig_str3_str <- rownames(topTags(Results[["STR3_SwimEffect"]],p = 0.05, n = Inf))
+
+#Sig propranolol interaction
+prop <- rownames(topTags(Results[["STR3_InteractionPropranolol_stagewise"]], n = Inf, p = 0.05))
+
+STR3p <- STR3[,STR3$Injection != "Sotalol"]
+
+#Adjust heatmap colors
+metadata(STR3p)$hmcols <- c("royalblue","white","firebrick4")
+ancols <- list(Condition=c( Control="peachpuff",
+                             Stress="indianred1"),
+               Injection=c( PBS="lightsteelblue1",
+                             Propranolol="steelblue"),
+               Sex=c(male="grey25", female="darkseagreen"))
+metadata(STR3p)$anno_colors <- ancols
+
+
+Fig1h <- sechm(STR3p, 
+     prop,
+     gaps_at = "Injection",
+     top_annotation = c("Injection","Condition","Sex"),
+     do.scale = T, 
+     cluster_rows = T,
+     column_title = "Genes with Propranolol:Swim interaction", assay = "corrected",
+     show_row_dend = FALSE)
+
+Fig1h
+```
+
+
+
+### Supplementary Figure 1a
+```{r}
+VolcanovHC_S <- VolcanoPlotsEdgeRMP(Results[c("STR2v_StressEffect","STR2v_StressvsPraz","STR2v_StressvsPropr")],main = "vHC",limits = c(-5,5))
+VolcanodHC_S <- VolcanoPlotsEdgeRMP(Results[c("STR2d_StressEffect","STR2d_StressvsPraz","STR2d_StressvsPropr")], main = "dHC",limits = c(-5,5))
+
+FigS1a <- plot_grid(VolcanovHC_S,VolcanodHC_S,ncol = 1)
+```
+### Supplementary Figure 1b: Ctrl-swim vs ctrl-swim+praz strength
+
+This Figure shows the strength of the stress effect vs the stress + prazosin effect (combined hemispheres)
+
+
+```{r}
+vHC_sw <- Results[["STR2v_CtrlvsSwim"]]$table
+dHC_sw <- Results[["STR2d_CtrlvsSwim"]]$table
+vHC_swpra <- Results[["STR2v_CtrlvsPraz"]]$table
+dHC_swpra <- Results[["STR2d_CtrlvsPraz"]]$table
+
+#select genes that are expressed in all comparisons
+temp <- intersect(intersect(rownames(vHC_sw),rownames(dHC_sw)),intersect(rownames(vHC_swpra),rownames(dHC_swpra)))
+
+sw <- vHC_sw[temp,]
+sw$logFC <- (sw$logFC + dHC_sw[temp,"logFC"]) / 2
+
+sw_pra <- vHC_swpra[temp,]
+sw_pra$logFC <- (sw_pra$logFC + dHC_swpra[temp,"logFC"]) / 2
+
+df_swvswpra <- data.frame(sw = sw$logFC,sw_pra = sw_pra$logFC)
+rownames(df_swvswpra) <- rownames(sw_pra)
+df_swvswpra <- na.omit(df_swvswpra[sig_str,])
+df_swvswpra <- df_swvswpra[order(df_swvswpra$sw),]
+df_swvswpra$index <- 1:nrow(df_swvswpra)
+
+FigS1b <- ggplot() + 
+  geom_point(data = df_swvswpra,aes(index, sw), color = "indianred1") + 
+  geom_point(data = df_swvswpra,aes(index, sw_pra), color = "#74ADD1") + 
+  theme_light()+
+  theme(panel.grid = element_line(linetype="dashed"), strip.background = element_rect(fill = "grey18"),legend.title = element_text(colour = "grey18", size = 10, face = "bold")) + 
+  scale_y_continuous(limits = c(-3,3)) + 
+  ylab("logFC")+
+  ggtitle("Stress vs Stress+Prazosin")
+
+FigS1b
+```
+### Supplementary Figure 1c: Ctrl-swim vs ctrl-swim+prop strength
+
+This Figure shows the stength of the stress effect vs the stress + propranolol effect (combined hemispheres)
+
+```{r}
+vHC_sw <- Results[["STR2v_CtrlvsSwim"]]$table
+dHC_sw <- Results[["STR2d_CtrlvsSwim"]]$table
+vHC_swpro <- Results[["STR2v_CtrlvsPropr"]]$table
+dHC_swpro <- Results[["STR2d_CtrlvsPropr"]]$table
+
+#select genes that are expressed in all comparisons
+temp <- intersect(intersect(rownames(vHC_sw),rownames(dHC_sw)),intersect(rownames(vHC_swpro),rownames(dHC_swpro)))
+
+sw <- vHC_sw[temp,]
+sw$logFC <- (sw$logFC + dHC_sw[temp,"logFC"]) / 2
+
+sw_pro <- vHC_swpro[temp,]
+sw_pro$logFC <- (sw_pro$logFC + dHC_swpro[temp,"logFC"]) / 2
+
+df_swvswpro <- data.frame(sw = sw$logFC,sw_pro = sw_pro$logFC)
+rownames(df_swvswpro) <- rownames(sw_pro)
+df_swvswpro <- na.omit(df_swvswpro[sig_str,])
+df_swvswpro <- df_swvswpro[order(df_swvswpro$sw),]
+df_swvswpro$index <- 1:nrow(df_swvswpro)
+
+FigS1c <- ggplot() + geom_point(data = df_swvswpro,aes(index, sw), color = "indianred1") + geom_point(data = df_swvswpro,aes(index, sw_pro), color = "steelblue") +
+  theme_light()+
+  theme(panel.grid = element_line(linetype="dashed"), strip.background = element_rect(fill = "grey18"),legend.title = element_text(colour = "grey18", size = 10, face = "bold")) + 
+  scale_y_continuous(limits = c(-3,3)) + 
+  ylab("logFC")+
+  ggtitle("Stress vs Stress+Propranolol response")
+
+FigS1c
+```
+### Supplementary Figure 1d: Propranolol Genes of experiment 1 in experiment 1&2 
+
+Heatmap that shows the significant propranolol genes of STR2 across STR2 and STR3
+
+```{r}
+STR$Injection[STR$Injection == "Propanolol"] <- "Propranolol"
+STR$Injection[STR$Injection == "Saline"] <- "PBS"
+STR$Injection <- factor(STR$Injection, levels = c("PBS","Yohimbine","Propranolol","Prazosin","Sotalol"))
+STR$Injection[STR$Condition2 == "Saline-Yohimbine"] <- "Yohimbine"
+STR$Sex[STR$Sex == "Male"] <- "male"
+STR <- STR[,order(STR$Experiment, STR$Region, STR$Injection, STR$Condition, STR$Sex)]
+STRp <- STR[,(STR$Injection != "Sotalol" & STR$Injection != "Yohimbine")]
+
+#Adjust heatmap colors
+metadata(STRp)$hmcols <- c("royalblue","white","firebrick4")
+ancols3 <- list(Region=c(dHC="grey18", vHC="sandybrown"),
+                Condition=c( Homecage="peachpuff",
+                             Stress="indianred1",
+                            Yohimbine="darkred"),
+               Injection=c( PBS="lightsteelblue1",
+                             Prazosin="lightblue",
+                             Propranolol="steelblue",
+                            Yohimbine="darkred"),
+               Sex=c(male="grey25", female="darkseagreen"))
+metadata(STRp)$anno_colors <- ancols3
+
+
+FigS1d <- sechm(STRp, 
+     sig_int,
+     gaps_at = c("Experiment","Region"),
+     top_annotation = c("Experiment","Injection","Condition","Sex","Region"),
+     do.scale = T, 
+     cluster_rows = T,
+     column_title = "Genes with Propranolol:Swim interaction", assay = "corrected",
+     show_row_dend = FALSE)
+
+FigS1d
+```
+
+
+### Supplementary Figure 1e: Combined Analysis of experiment 1 and 2
+
+Combine datasets STR2 and STR3 (only Control vs Swim / Saline vs Propranolol and only vHC) and run a sva correction prior to multiplicative model analysis for swim, propranolol and interaction effects testing. We then test for stress responsive genes that also have a significant Propranolol * Stress interaction
+
+```{r}
+STRprop <- STRp[,STRp$Injection != "Prazosin"]
+STRprop <- STRprop[,STRprop$Region == "vHC"]
+STRprop$Injection <- droplevels(STRprop$Injection)
+STRprop$Condition <- droplevels(STRprop$Condition)
+
+STRprop <- dosvacor(STRprop, form = ~Condition * Injection + Experiment, form0 = ~Experiment)
+
+STRprop_design <- model.matrix(~STRprop$Condition * STRprop$Injection + STRprop$SV1 + STRprop$SV2 + STRprop$SV3 + STRprop$SV4 + STRprop$SV5)
+
+y <- DGEList(counts=assays(STRprop)$counts)
+y <- calcNormFactors(y)
+y <- estimateDisp(y,STRprop_design)
+#filter out genes that are low expressed
+y <- y[filterByExpr(y, STRprop_design, min.count = mincount),]
+STRprop_fit <- glmQLFit(y,STRprop_design)
+
+Results[["STRprop_FullModel"]] <- glmQLFTest(STRprop_fit, colnames(STRprop_design)[c(2,3,9)])
+Results[["STRprop_Stress"]] <- glmQLFTest(STRprop_fit, colnames(STRprop_design)[2])
+Results[["STRprop_Propranolol"]] <- glmQLFTest(STRprop_fit, colnames(STRprop_design)[3])
+Results[["STRprop_Interaction"]] <- glmQLFTest(STRprop_fit, colnames(STRprop_design)[9])
+
+#to further boost significance we use a stagewise multiple testing method, where we only check stress responsive genes for a significant interaction term
+Results[["STRprop_Interaction_stagewise"]] <- glmQLFTest(STRprop_fit[rownames(topTags(Results[["STRprop_Stress"]], p = 0.05, n = Inf)),], colnames(STRprop_design)[9])
+
+STRprop <- STRprop[,order(STRprop$Injection,STRprop$Condition)]
+
+#Adjust heatmap colors
+metadata(STRprop)$hmcols <- c("royalblue","white","firebrick4")
+ancols3 <- list(Region=c(dHC="grey18", vHC="sandybrown"),
+                Condition=c( Homecage="peachpuff",
+                             Stress="indianred1",
+                            Yohimbine="darkred"),
+               Injection=c( PBS="lightsteelblue1",
+                             Prazosin="lightblue",
+                             Propranolol="steelblue",
+                            Yohimbine="darkred"),
+               Sex=c(male="grey25", female="darkseagreen"))
+metadata(STRprop)$anno_colors <- ancols3
+
+FigS1e <- sechm(STRprop, 
+     rownames(topTags(Results[["STRprop_Interaction_stagewise"]], n = Inf, p = 0.05)),
+     top_annotation = c("Experiment","Injection","Condition","Sex"),
+     gaps_at = c("Injection"),
+     do.scale = T, 
+     cluster_rows = T,
+     column_title = "Stress Genes responsive to Propranolol", assay = "corrected",
+     show_row_dend = FALSE)
+
+FigS1e
+```
+
+
+### Supplementary Figure 1f: Expression of specific genes
+
+multiple figures that show the expression of Dio2 and other genes across all datasets (without Yohimbine)
+
+```{r}
+
+meltSE_LvZ <- function(se, features, assays = NULL){
+  if(is.null(assays)){
+    assays <- "counts"
+  }
+  print(paste("using data:", assays, sep = " "))
+  out <- NULL
+  for(i in features){
+      out <- rbind(out, data.frame(feature = i, colData(se), value = assays(se)[[assays]][i,]))
+  }
+  return(out)
+}
+
+#Apold1
+plotdat <- meltSE_LvZ(STR,c("Apold1"),"corrected")
+plotdat <- plotdat[!(plotdat$Injection %in% c("Yohimbine","Sotalol")),]
+ 
+FigS1f_Apold1 <- BoxplotMP(plotdat,Injection,value, Condition)+ 
+    scale_color_manual(values=c("grey18","indianred1"))+ 
+  facet_grid(feature~Region +Experiment, scales = "free")
+
+FigS1f_Apold1
+
+#Sik1
+plotdat <- meltSE_LvZ(STR,c("Sik1"),"corrected")
+plotdat <- plotdat[!(plotdat$Injection %in% c("Yohimbine","Sotalol")),]
+ 
+FigS1f_Sik1 <- BoxplotMP(plotdat,Injection,value, Condition)+ 
+    scale_color_manual(values=c("grey18","indianred1"))+ 
+  facet_grid(feature~Region +Experiment, scales = "free")
+
+FigS1f_Sik1
+
+#Dio2
+plotdat <- meltSE_LvZ(STR,c("Dio2"),"corrected")
+plotdat <- plotdat[!(plotdat$Injection %in% c("Yohimbine","Sotalol")),]
+
+
+FigS1f_Dio2 <- BoxplotMP(plotdat,Injection,value, Condition)+ 
+    scale_color_manual(values=c("grey18","indianred1"))+ 
+  facet_grid(feature~Region +Experiment, scales = "free")
+
+FigS1f_Dio2
+
+#Ppp1r3c
+plotdat <- meltSE_LvZ(STR,c("Ppp1r3c"),"corrected")
+plotdat <- plotdat[!(plotdat$Injection %in% c("Yohimbine","Sotalol")),]
+ 
+FigS1f_Ppp1r3c <- BoxplotMP(plotdat,Injection,value, Condition)+ 
+    scale_color_manual(values=c("grey18","indianred1"))+ 
+  facet_grid(feature~Region +Experiment, scales = "free")
+
+FigS1f_Ppp1r3c
+
+```
+
+## Supplementary Figure 1h: Expression of some genes after direct Isoproterenol infusion to the hippocampus
+
+```{r}
+ISO <- read.csv("../19122022_Figure1_Analysis/Data/ISO_qPCR_data.csv", sep = ";")
+#ISOdHC <- subset(ISO, Region == "dHC" & ISO$Gene != "Apold1")
+ISOdHC <- subset(ISO, Region == "dHC")
+
+#Apold1
+ISOapo <- subset(ISOdHC, Gene == "Apold1")
+FigS1h_Apold1_dHC <- BoxplotMP(ISOapo, x=factor(Group, level=c('Vehicle', 'Isoprotenerol')), Expression, Group)+ 
+    scale_color_manual(values=c("darkseagreen","grey18")) +
+  facet_grid(~Gene, scales = "free")
+
+#Dio2
+ISOdio <- subset(ISOdHC, Gene == "Dio2")
+FigS1h_Dio2_dHC <- BoxplotMP(ISOdio, x=factor(Group, level=c('Vehicle', 'Isoprotenerol')), Expression, Group)+ 
+    scale_color_manual(values=c("darkseagreen","grey18")) +
+  facet_grid(~Gene, scales = "free")
+
+#Ppp1r3c
+ISOppp <- subset(ISOdHC, Gene == "Ppp1r3c")
+FigS1h_Ppp1r3c_dHC <- BoxplotMP(ISOppp, x=factor(Group, level=c('Vehicle', 'Isoprotenerol')), Expression, Group)+ 
+    scale_color_manual(values=c("darkseagreen","grey18")) +
+  facet_grid(~Gene, scales = "free")
+
+#Sik1
+ISOsik <- subset(ISOdHC, Gene == "Sik1")
+FigS1h_Sik1_dHC <- BoxplotMP(ISOsik, x=factor(Group, level=c('Vehicle', 'Isoprotenerol')), Expression, Group)+ 
+    scale_color_manual(values=c("darkseagreen","grey18")) +
+  facet_grid(~Gene, scales = "free")
+
+
+FigS1h <- plot_grid(FigS1h_Apold1_dHC,FigS1h_Dio2_dHC,FigS1h_Ppp1r3c_dHC, FigS1h_Sik1_dHC, nrow = 1)
+FigS1h
+```
+
+### Stats for Supplementary Figure 1h
+
+```{r}
+
+#Apold1
+var.test(Expression ~ Group, data = ISOapo)
+t.test(formula = Expression ~ Group, data=ISOapo)
+
+#Cyr61
+var.test(Expression ~ Group, data = ISOcyr)
+t.test(formula = Expression ~ Group, data=ISOcyr)
+
+#Dio2
+var.test(Expression ~ Group, data = ISOdio)
+t.test(formula = Expression ~ Group, data=ISOdio, var.equal = TRUE)
+
+#Ppp1r3c
+var.test(Expression ~ Group, data = ISOppp)
+t.test(formula = Expression ~ Group, data=ISOppp)
+
+#Sik1
+var.test(Expression ~ Group, data = ISOsik)
+t.test(formula = Expression ~ Group, data=ISOsik)
+
+```
+
+### Figure 2d and Supplementary Fig. 2b
+
+New figures for Yohimbine vs Swim / Ctrl. These will no go to figure 2 and/or S2
+
+```{r}
+Fig2d <- VolcanoPlotsEdgeRMP(Results[c("STR2d_CtrlvsYohimb","STR2v_CtrlvsYohimb")],main = "Control vs Yohimbine",limits = c(-5,5),lab = c(rownames(topTags(Results[["STR2d_CtrlvsYohimb"]])), "Dio2"))
+
+VolcanovHC_CvY_d <- VolcanoPlotsEdgeRMP(Results[c("STR2d_CtrlvsSwim","STR2d_CtrlvsYohimb", "STR2d_SwimvsYohimb")],main = "dHC",limits = c(-5,5))
+VolcanovHC_CvY_v <- VolcanoPlotsEdgeRMP(Results[c("STR2v_CtrlvsSwim","STR2v_CtrlvsYohimb", "STR2v_SwimvsYohimb")],main = "vHC",limits = c(-5,5))
+
+FigS2b <- plot_grid(VolcanovHC_CvY_d,VolcanovHC_CvY_v,ncol = 1)
+
+Fig2d
+FigS2b
+```
+
+### Figure 2e: Ctrl-swim vs ctrl- yohimbine strength
+
+This Figure shows the strength of the stress effect vs the yohimbine effect (combined hemispheres)
+
+```{r}
+vHC_sw <- Results[["STR2v_CtrlvsSwim"]]$table
+dHC_sw <- Results[["STR2d_CtrlvsSwim"]]$table
+vHC_yoh <- Results[["STR2v_CtrlvsYohimb"]]$table
+dHC_yoh <- Results[["STR2d_CtrlvsYohimb"]]$table
+
+#select genes that are expressed in all comparisons
+temp <- intersect(intersect(rownames(vHC_sw),rownames(dHC_sw)),intersect(rownames(vHC_yoh),rownames(dHC_yoh)))
+
+sw <- vHC_sw[temp,]
+sw$logFC <- (sw$logFC + dHC_sw[temp,"logFC"]) / 2
+
+yoh <- vHC_yoh[temp,]
+yoh$logFC <- (yoh$logFC + dHC_yoh[temp,"logFC"]) / 2
+
+df_swvsyoh <- data.frame(sw = sw$logFC,yoh = yoh$logFC)
+rownames(df_swvsyoh) <- rownames(yoh)
+df_swvsyoh <- na.omit(df_swvsyoh[sig_str,])
+df_swvsyoh <- df_swvsyoh[order(df_swvsyoh$sw),]
+df_swvsyoh$index <- 1:nrow(df_swvsyoh)
+
+Fig2e <- ggplot() + 
+  geom_point(data = df_swvsyoh,aes(index, sw), color = "indianred1") + 
+  geom_point(data = df_swvsyoh,aes(index, yoh), color = "darkred") + 
+  theme_light()+
+  theme(panel.grid = element_line(linetype="dashed"), strip.background = element_rect(fill = "grey18"),legend.title = element_text(colour = "grey18", size = 10, face = "bold")) + 
+  scale_y_continuous(limits = c(-3,3)) + 
+  ylab("logFC")+
+  ggtitle("Stress vs Yohimbine") 
+
+Fig2e
+```
+
+
+
+#Supplementary Fig. 5: Sex-dependent differences
+```{r}
+
+meltSE_LvZ <- function(se, features, assays = NULL){
+  if(is.null(assays)){
+    assays <- "counts"
+  }
+  print(paste("using data:", assays, sep = " "))
+  out <- NULL
+  for(i in features){
+      out <- rbind(out, data.frame(feature = i, colData(se), value = assays(se)[[assays]][i,]))
+  }
+  return(out)
+}
+
+#plotdat <- meltSE_LvZ(STR3p,c("Ctla2b","Apold1"))
+
+plotdat <- meltSE_LvZ(STR3p,c("Ctla2b"))
+plotdat <- plotdat[!(plotdat$Injection %in% c("Yohimbine","Sotalol")),]
+ 
+
+FigS5_Ctla2b <- BoxplotMP(plotdat,Injection,value, Condition)+ 
+    #scale_color_manual(values=c("grey18","indianred1"))+ 
+  facet_grid(feature~Region~Sex +Experiment, scales = "free")
+
+FigS5_Ctla2b
+```
+
+
+
+
+## Show Final Figures
+
+#Figure 1
+
+```{r, fig.width=6, fig.height=6}
+print(Fig1d)
+```
+
+```{r, fig.width=4, fig.height=4}
+print(Fig1e)
+```
+
+```{r, fig.width=4, fig.height=4}
+print(Fig1f)
+```
+
+```{r, fig.width=6, fig.height=6}
+print(Fig1h)
+```
+
+#Supplementary Figure 1
+
+```{r, fig.width=6, fig.height=6}
+print(FigS1a)
+```
+
+```{r, fig.width=4, fig.height=4}
+print(FigS1b)
+```
+
+```{r, fig.width=6, fig.height=5}
+print(FigS1c)
+```
+
+```{r, fig.width=6, fig.height=6}
+print(FigS1d)
+```
+
+```{r, fig.width=6, fig.height=6}
+print(FigS1e)
+```
+
+```{r, fig.width=6, fig.height=3}
+print(FigS1f_Dio2)
+```
+
+```{r, fig.width=6, fig.height=3}
+print(FigS1f_Apold1)
+```
+
+```{r, fig.width=6, fig.height=3}
+print(FigS1f_Sik1)
+```
+
+```{r, fig.width=6, fig.height=3}
+print(FigS1f_Ppp1r3c)
+```
+
+```{r}
+print(FigS1h)
+```
+
+# Figure 2
+
+```{r, fig.width=4, fig.height=4}
+print(Fig2d)
+```
+
+```{r, fig.width=4, fig.height=4}
+print(Fig2e)
+```
+
+#Supplementary Figure 2
+
+```{r, fig.width=5, fig.height=3}
+print(FigS2b)
+```
+
+#Supplementary Figure 2
+
+```{r}
+print(FigS5_Ctla2b)
+```
+
+
+
+## Export Figures
+
+```{r}
+pdf(file = "../19122022_Figure1_Analysis/Figures/Fig1d.pdf", width = 6, height = 6)
+print(Fig1d)
+dev.off()
+
+pdf(file = "../19122022_Figure1_Analysis/Figures/Fig1e.pdf", width = 4, height = 4)
+print(Fig1e)
+dev.off()
+
+pdf(file = "../19122022_Figure1_Analysis/Figures/Fig1f.pdf", width = 4, height = 4)
+print(Fig1f)
+dev.off()
+
+pdf(file = "../19122022_Figure1_Analysis/Figures/Fig1h.pdf", width = 4, height = 4)
+print(Fig1h)
+dev.off()
+
+#Supplementary Fig1
+pdf(file = "../19122022_Figure1_Analysis/Figures/FigS1a.pdf", width = 6, height = 6)
+print(FigS1a)
+dev.off()
+
+pdf(file = "../19122022_Figure1_Analysis/Figures/FigS1b.pdf", width = 4, height = 4)
+print(FigS1b)
+dev.off()
+
+pdf(file = "../19122022_Figure1_Analysis/Figures/FigS1c.pdf", width = 4, height = 4)
+print(FigS1c)
+dev.off()
+
+pdf(file = "../19122022_Figure1_Analysis/Figures/FigS1d.pdf", width = 6, height = 6)
+print(FigS1d)
+dev.off()
+
+pdf(file = "../19122022_Figure1_Analysis/Figures/FigS1e.pdf", width = 6, height = 6)
+print(FigS1e)
+dev.off()
+
+pdf(file = "../19122022_Figure1_Analysis/Figures/FigS1f_Dio2.pdf", width = 6, height = 3)
+print(FigS1f_Dio2)
+dev.off()
+
+pdf(file = "../19122022_Figure1_Analysis/Figures/FigS1f_Apold1.pdf", width = 6, height = 3)
+print(FigS1f_Apold1)
+dev.off()
+
+pdf(file = "../19122022_Figure1_Analysis/Figures/FigS1f_Ppp1r3c.pdf", width = 6, height = 3)
+print(FigS1f_Ppp1r3c)
+dev.off()
+
+pdf(file = "../19122022_Figure1_Analysis/Figures/FigS1f_Sik1.pdf", width = 6, height = 3)
+print(FigS1f_Sik1)
+dev.off()
+
+
+
+
+#Figure 2 related
+pdf(file = "../19122022_Figure1_Analysis/Figures/Fig2d.pdf", width = 5, height = 3)
+print(Fig2d)
+dev.off()
+
+pdf(file = "../19122022_Figure1_Analysis/Figures/Fig2e.pdf", width = 6, height = 5)
+print(Fig2e)
+dev.off()
+
+pdf(file = "../19122022_Figure1_Analysis/Figures/FigS2b.pdf", width = 6, height = 6)
+print(FigS2b)
+dev.off()
+
+#Supplementary Fig.5
+
+pdf(file = "../19122022_Figure1_Analysis/Figures/FigS5_Ctla2b.pdf", width = 6, height = 6)
+print(FigS5_Ctla2b)
+dev.off()
+
+```
+
+## Create final data frames (containing corrected expression and Results data as single SE file, compatible with tinySEV)
+
+
+```{r, eval = FALSE}
+rowData(STR2)$Sig_vHC <- NULL
+rowData(STR2)$Sig_dHC <- NULL
+
+for(i in names(Results)){
+  Results[[i]]$table$FDR <- p.adjust(Results[[i]]$table$PValue, method = "fdr")
+}
+
+rowData(STR2)$DEA.vHC_FullModel <- Results$STR2v_FullModel$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.vHC_FullModel, "description") <- "Full model analysis of vHC samples that tests if a gene is in general differentially expressed accross all 5 groups"
+
+rowData(STR2)$DEA.dHC_FullModel<- Results$STR2d_FullModel$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.dHC_FullModel, "description") <- "Full model analysis of dHC samples that tests if a gene is in general differentially expressed accross all 5 groups"
+
+rowData(STR2)$DEA.dHC_StressEffect<- Results$STR2d_StressEffect$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.dHC_StressEffect, "description") <- "Analysis that tests if a gene is differentially expressed after stress (either swim or yohimbine injection) vs ctrl in the dHC"
+
+rowData(STR2)$DEA.vHC_StressEffect <- Results$STR2v_StressEffect$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.vHC_StressEffect, "description") <- "Analysis that tests if a gene is differentially expressed after stress (either swim or yohimbine injection) vs ctrl in the vHC"
+
+rowData(STR2)$DEA.vHC_CtrlvsSwim <- Results$STR2v_CtrlvsSwim$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.vHC_CtrlvsSwim, "description") <- "Contrast analysis that tests if a gene is differentially expressed in swim vs control animals in the vHC"
+
+rowData(STR2)$DEA.dHC_CtrlvsSwim <- Results$STR2d_CtrlvsSwim$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.dHC_CtrlvsSwim, "description") <- "Contrast analysis that tests if a gene is differentially expressed in swim vs control animals in the dHC"
+
+rowData(STR2)$DEA.vHC_SwimvsYohimb <- Results$STR2v_SwimvsYohimb$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.vHC_SwimvsYohimb, "description") <- "Contrast analysis that tests if a gene is differentially expressed in swim vs yohimbine animals in the vHC"
+
+rowData(STR2)$DEA.vHC_StressvsPraz <- Results$STR2v_StressvsPraz$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.vHC_StressvsPraz, "description") <- "Contrast analysis that tests if a gene is differentially expressed in stress (swim and yohimbin) vs swim + prazosin animals in the vHC"
+
+rowData(STR2)$DEA.vHC_StressvsPropr <- Results$STR2v_StressvsPropr$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.vHC_StressvsPropr, "description") <- "Contrast analysis that tests if a gene is differentially expressed in stress (swim and yohimbin) vs swim + propranolol animals in the vHC"
+
+rowData(STR2)$DEA.vHC_CtrlvsPropr <- Results$STR2v_CtrlvsPropr$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.vHC_CtrlvsPropr, "description") <- "Contrast analysis that tests if a gene is differentially expressed in ctrl vs swim + propranolol animals in the vHC"
+
+rowData(STR2)$DEA.vHC_CtrlvsYohimb <- Results$STR2v_CtrlvsYohimb$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.vHC_CtrlvsYohimb, "description") <- "Contrast analysis that tests if a gene is differentially expressed in ctrl vs yohimbine animals in the vHC"
+
+rowData(STR2)$DEA.vHC_CtrlvsPraz <- Results$STR2v_CtrlvsPraz$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.vHC_CtrlvsPraz, "description") <- "Contrast analysis that tests if a gene is differentially expressed in ctrl vs swim + prazosin animals in the vHC"
+
+rowData(STR2)$DEA.dHC_SwimvsYohimb <- Results$STR2d_SwimvsYohimb$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.dHC_SwimvsYohimb, "description") <- "Contrast analysis that tests if a gene is differentially expressed in swim vs yohimbine animals in the dHC"
+
+
+rowData(STR2)$DEA.dHC_StressvsPraz <- Results$STR2d_StressvsPraz$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.dHC_StressvsPraz, "description") <- "Contrast analysis that tests if a gene is differentially expressed in stress (swim and yohimbin) vs swim + prazosin animals in the dHC"
+
+rowData(STR2)$DEA.dHC_StressvsPropr <- Results$STR2d_StressvsPropr$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.dHC_StressvsPropr, "description") <- "Contrast analysis that tests if a gene is differentially expressed in stress (swim and yohimbin) vs swim + propranolol animals in the dHC"
+
+rowData(STR2)$DEA.dHC_CtrlvsPropr <- Results$STR2d_CtrlvsPropr$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.dHC_CtrlvsPropr, "description") <- "Contrast analysis that tests if a gene is differentially expressed in ctrl vs swim + propranolol animals in the dHC"
+
+rowData(STR2)$DEA.dHC_CtrlvsYohimb <- Results$STR2d_CtrlvsYohimb$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.dHC_CtrlvsYohimb, "description") <- "Contrast analysis that tests if a gene is differentially expressed in ctrl vs yohimbine animals in the dHC"
+
+rowData(STR2)$DEA.dHC_CtrlvsPraz <- Results$STR2d_CtrlvsPraz$table[rownames(STR2),]
+attr(rowData(STR2)$DEA.dHC_CtrlvsPraz, "description") <- "Contrast analysis that tests if a gene is differentially expressed in ctrl vs swim + prazosin animals in the dHC"
+
+metadata(STR2)$default_view <- list(assay = "corrected", groupvar = "Injection", colvar = "Condition", gridvar = "Region")
+metadata(STR2)$description <- "In this experiment the effect of pharmacological noradrenaline (NA) interventions on the transcriptomic acute stress response is assessed. 5 groups are present in this dataset. saline - control, saline - swim, yohimbin, propranolol - swim, prazosin - swim. The standard swim response is captured by the saline - swim group. The yohimbin group is an acute injection of yohimbin, an alpha-2 adrenergic antagonist that increases NA release of the LC in the hippocampus. the propranolol - swim group combines propranolol (a beta adrenergic receptor blocker) with acute swim stress. the prazosin - swim group comibnes prazosin (an alpha adrenergic receptor blocker) with acute swim stress. swim stress and yohimbine are administered 45min prior to sacrifice. for each animal vHC and dHC samples were collected and analyzed independently within these two regions"
+
+
+saveRDS(STR2,"../final_data/STR2_Complete.SE.Rds")
+
+
+rowData(STR3)$DEA.FullModel <- Results$STR3_FullModel$table[rownames(STR3),]
+attr(rowData(STR3)$DEA.FullModel, "description") <- "Analysis of the full model analysis swim * injection. Tests if a gene is in general variable across these variables"
+
+rowData(STR3)$DEA.SwimEffect <- Results$STR3_SwimEffect$table[rownames(STR3),]
+attr(rowData(STR3)$DEA.SwimEffect, "description") <- "Analysis of the swim coefficient of the swim * injection analysis. Tests if a gene is swim stress responsive"
+
+rowData(STR3)$DEA.InteractionPropranolol <- Results$STR3_InteractionPropranolol$table[rownames(STR3),]
+attr(rowData(STR3)$DEA.InteractionPropranolol, "description") <- "Analysis of the swim:propranolol interaction of the swim * injection analysis. Tests if a gene reacts differently to swim when propranolol is administred"
+
+rowData(STR3)$DEA.InteractionSotolol <- Results$STR3_InteractionSotolol$table[rownames(STR3),]
+attr(rowData(STR3)$DEA.InteractionSotolol, "description") <- "Analysis of the swim:sotalol interaction of the swim * injection analysis. Tests if a gene reacts differently to swim when sotalol is administred"
+
+rowData(STR3)$DEA.male_InteractionPropranolol <- Results$STR3_m_InteractionPropranolol$table[rownames(STR3),]
+attr(rowData(STR3)$DEA.male_InteractionPropranolol, "description") <- "Analysis of the swim:propranolol interaction of the swim * injection analysis in males only. Tests if a gene reacts differently to swim when propranolol is administred"
+
+rowData(STR3)$DEA.female_InteractionPropranolol <- Results$STR3_f_InteractionPropranolol$table[rownames(STR3),]
+attr(rowData(STR3)$DEA.female_InteractionPropranolol, "description") <- "Analysis of the swim:propranolol interaction of the swim * injection analysis in females only. Tests if a gene reacts differently to swim when propranolol is administred"
+
+rowData(STR3)$DEA.PBS_CtrlvsSwim <- Results$STR3_contrasts_PBS_CtrlvsSwim$table[rownames(STR3),]
+attr(rowData(STR3)$DEA.PBS_CtrlvsSwim, "description") <- "Contrast analysis of swim vs control in PBS injected animals"
+
+rowData(STR3)$DEA.Propranolol_CtrlvsSwim <- Results$STR3_contrasts_Propranolol_CtrlvsSwim$table[rownames(STR3),]
+attr(rowData(STR3)$DEA.Propranolol_CtrlvsSwim, "description") <- "Contrast analysis of swim vs control in Propranolol injected animals"
+
+rowData(STR3)$DEA.Sotalol_CtrlvsSwim <- Results$STR3_contrasts_Sotalol_CtrlvsSwim$table[rownames(STR3),]
+attr(rowData(STR3)$DEA.Sotalol_CtrlvsSwim, "description") <- "Contrast analysis of swim vs control in Sotalol injected animals"
+
+metadata(STR3)$default_view <- list(assay = "corrected", groupvar = "Injection", colvar = "Condition")
+metadata(STR3)$description <- "In this experiment the effect of pharmacological noradrenaline (NA) interventions on the transcriptomic acute stress response is assessed. Two independent variables are included, Condition (swim or control) and Injection (PBS, propranolo, sotalol). propranolol is a beta adrenergic blocker that acts in the periphery and in the CNS whereas sotalol is a beta adrenergic blocker that only acts in the periphery. Analysis was done with an interactive model Condition * Injection, that tests for swim effect and swim:injection interactions"
+
+
+saveRDS(STR3,"../final_data/STR3_Complete.SE.Rds")
+```

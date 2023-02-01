@@ -1,0 +1,348 @@
+---
+title: "Privitera et. al 2023 - Analysis of Supplementary Figure 3"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Install packages
+
+```{r, echo=FALSE}
+#Install packages
+
+install.packages("tidyverse", lib = "C:/Users/pmattia/Documents/Rlibs")
+install.packages("gridExtra", lib = "C:/Users/pmattia/Documents/Rlibs")
+install.packages("cowplot", lib = "C:/Users/pmattia/Documents/Rlibs")
+install.packages("ggplot2", lib = "C:/Users/pmattia/Documents/Rlibs")
+install.packages("ggpubr", lib = "C:/Users/pmattia/Documents/Rlibs")
+
+
+```
+
+#Load Packages
+
+```{r}
+library(reshape2)
+library(ggplot2)
+library(knitr)
+library(tidyverse)
+library(cowplot)
+library(devtools)
+library(ggpubr)
+```
+
+#Load Data
+
+```{r}
+BehaviourData <- read.csv("../Supplementary Fig. Behaviour/Behaviour_data.csv", stringsAsFactors = FALSE, sep = ";")
+```
+
+#Sort Data
+
+```{r}
+
+#Only Open field data
+OFT <- BehaviourData %>% filter(Test == "OFT")
+Experiments.OFT <- levels(as.factor(OFT$Experiment))
+OFT$Supported <- as.numeric(OFT$Supported)
+OFT$Unsupported <- as.numeric(OFT$Unsupported)
+
+```
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Reanalysis of acute stress induced behaviour in the OFT as % of control
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+```{r}
+Plots_stressOFT <- list()
+
+
+titel <- ggplot() + ggtitle("Acute stress")
+Subdata1 <- OFT[OFT$Experiment == 'AS',]
+
+str1 <- BoxplotMP(Subdata1, x=Group, y=Distance_Per, z=Group) + scale_y_continuous(breaks=seq(0, 300, 50), limits=c(0, 300))
+
+str2 <- BoxplotMP(Subdata1, x=Group, y=Center_Per, z=Group) + scale_y_continuous(breaks=seq(0, 300, 50), limits=c(0, 300))
+
+str3 <- BoxplotMP(Subdata1, x=Group, y=Supported_Per, z=Group) + scale_y_continuous(breaks=seq(0, 300, 50), limits=c(0, 300))
+
+str4 <- BoxplotMP(Subdata1, x=Group, y=Unsupported_Per, z=Group) + scale_y_continuous(breaks=seq(0, 300, 50), limits=c(0, 300))
+
+strOFTplots <- plot_grid(str1, str2, str3, str4, labels = c("A","","",""))
+Plots_stressOFT <- plot_grid(titel,strOFTplots, rel_heights = c(0.1,1),ncol = 1)
+
+Plots_stressOFT
+```
+
+#Statistics for acute stress OFT data
+
+```{r}
+#For Males
+
+var.test(Distance_Per ~ Group, data=Subdata1)
+t.test(formula = Distance_Per ~ Group, data=Subdata1, var.equal = TRUE)
+
+var.test(Center_Per ~ Group, data=Subdata1)
+t.test(formula = Center_Per ~ Group, data=Subdata1)
+
+var.test(Supported_Per ~ Group, data=Subdata1)
+t.test(formula = Supported_Per ~ Group, data=Subdata1, var.equal = TRUE)
+
+var.test(Unsupported_Per ~ Group, data=Subdata1)
+t.test(formula = Unsupported_Per ~ Group, data=Subdata1, var.equal = TRUE)
+```
+
+#Save as pdf
+
+```{r}
+pdf("Results_acutestressOFT.pdf", width = 12, height = 10)
+print(Plots_stressOFT)
+
+dev.off()
+```
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Analysis of yohimbine LC activation in the OFT and epm as % of control
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+```{r}
+Plots_yohiOFT <- list()
+
+
+titel <- ggplot() + ggtitle("Yohimbine LC activation")
+Subdata2 <- OFT[OFT$Experiment == 'Yohi1',]
+
+
+y1 <- BoxplotMP(Subdata2, x=Group, y=Distance_Per, z=Group) + scale_y_continuous(breaks=seq(0, 300, 50), limits=c(0, 300))
+
+y2 <- BoxplotMP(Subdata2, x=Group, y=Center_Per, z=Group) + scale_y_continuous(breaks=seq(0, 300, 50), limits=c(0, 300))
+
+y3 <- BoxplotMP(Subdata2, x=Group, y=Supported_Per, z=Group) + scale_y_continuous(breaks=seq(0, 300, 50), limits=c(0, 300))
+
+y4 <- BoxplotMP(Subdata2, x=Group, y=Unsupported_Per, z=Group) + scale_y_continuous(breaks=seq(0, 300, 50), limits=c(0, 300))
+
+yohiOFTplots <- plot_grid(y1, y2, y3, y4, labels = c("A","","",""))
+Plots_yohiOFT_Per <- plot_grid(titel,yohiOFTplots, rel_heights = c(0.1,1),ncol = 1)
+
+Plots_yohiOFT_Per
+
+```
+#Yohimbine OFT stats
+```{r}
+#For Males
+
+var.test(Distance_Per ~ Group, data=Subdata2)
+var.test(Center_Per ~ Group, data=Subdata2)
+var.test(Supported_Per ~ Group, data=Subdata2)
+var.test(Unsupported_Per ~ Group, data=Subdata2)
+
+
+t.test(formula = Distance_Per ~ Group, data=Subdata2, var.equal = TRUE)
+t.test(formula = Center_Per ~ Group, data=Subdata2, var.equal = TRUE)
+t.test(formula = Supported_Per ~ Group, data=Subdata2, var.equal = TRUE)
+t.test(formula = Unsupported_Per ~ Group, data=Subdata2)
+```
+#Save as pdf
+
+```{r}
+pdf("Results_yohimbineOFT.pdf", width = 12, height = 10)
+print(Plots_yohiOFT_Per)
+
+dev.off()
+```
+
+
+
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Analysis of chemogenetic LC activation in the OFT as % of control
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+```{r}
+Plots_chemoOFT <- list()
+
+
+titel <- ggplot() + ggtitle("Chemogenetic LC activation")
+Subdata4ch <- OFT[OFT$Experiment == 'Dre1',]
+
+
+ch1 <- BoxplotMP(Subdata4ch, x=Group, y=Distance_Per, z=Group) + scale_y_continuous(breaks=seq(0, 200, 50), limits=c(0, 200))
+
+ch2 <- BoxplotMP(Subdata4ch, x=Group, y=Center_Per, z=Group) + scale_y_continuous(breaks=seq(0, 200, 50), limits=c(0, 200))
+
+ch3 <- BoxplotMP(Subdata4ch, x=Group, y=Supported_Per, z=Group) + scale_y_continuous(breaks=seq(0, 200, 50), limits=c(0, 200))
+
+ch4 <- BoxplotMP(Subdata4ch, x=Group, y=Unsupported_Per, z=Group) + scale_y_continuous(breaks=seq(0, 200, 50), limits=c(0, 200))
+
+chemoOFTplots <- plot_grid(ch1, ch2, ch3, ch4, labels = c("A","","",""))
+Plots_chemoOFT <- plot_grid(titel,chemoOFTplots, rel_heights = c(0.1,1),ncol = 1)
+
+Plots_chemoOFT
+
+```
+
+#Statistics for chemogenetic OFT data
+
+```{r}
+#For Males
+
+var.test(Distance_Per ~ Group, data=Subdata4ch)
+var.test(Center_Per ~ Group, data=Subdata4ch)
+var.test(Supported_Per ~ Group, data=Subdata4ch)
+var.test(Unsupported_Per ~ Group, data=Subdata4ch)
+
+t.test(formula = Distance_Per ~ Group, data=Subdata4ch, var.equal = TRUE)
+t.test(formula = Center_Per ~ Group, data=Subdata4ch, var.equal = TRUE)
+t.test(formula = Supported_Per ~ Group, data=Subdata4ch, var.equal = TRUE)
+t.test(formula = Unsupported_Per ~ Group, data=Subdata4ch)
+```
+
+#Save as pdf
+
+```{r}
+pdf("Results_chemogeneticOFT.pdf", width = 12, height = 10)
+print(Plots_chemoOFT)
+
+dev.off()
+```
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Combined analysis of optogenetic whole LC activation in the OFT as % of control
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+## Subset data
+```{r}
+
+#Combined optogenetic OFT data (whole LC activation for males and females)
+Opto.OFT.Males.LC <- OFT %>% filter(Sex == "Male", Activation == "LC", Method == "Optogenetics")
+Opto.OFT.Females.LC <- OFT %>% filter(Sex == "Female", Activation == "LC", Method == "Optogenetics")
+
+```
+
+# Plot combined optogenetic OFT data as % of control
+
+```{r}
+
+Plots_OFT_Males_Per <- list()
+titelm <- ggplot() + ggtitle("males combined")
+
+
+#For male Mice
+Subdata5 <- Opto.OFT.Males.LC
+
+c1 <- BoxplotMP(Subdata5, x=Group, y=Distance_Per, z=Group) + scale_y_continuous(breaks=seq(0, 350, 50), limits=c(0, 350))
+
+c2 <- BoxplotMP(Subdata5, x=Group, y=Center_Per, z=Group) + scale_y_continuous(breaks=seq(0, 350, 50), limits=c(0, 350))
+
+c3 <- BoxplotMP(Subdata5, x=Group, y=Supported_Per, z=Group) + scale_y_continuous(breaks=seq(0, 350, 50), limits=c(0, 350))
+
+c4 <- BoxplotMP(Subdata5, x=Group, y=Unsupported_Per, z=Group) + scale_y_continuous(breaks=seq(0, 350, 50), limits=c(0, 350))
+
+
+optoOFTplots_Per <- plot_grid(c1, c2, c3, c4, labels = c("A","","",""))
+Plots_OFT_Males_Per <- plot_grid(titelm,optoOFTplots_Per, rel_heights = c(0.1,1),ncol = 1)
+
+Plots_OFT_Males_Per
+
+#For female Mice
+Plots_OFT_Females_Per <- list()
+titelf <- ggplot() + ggtitle("females combined")
+Subdata6 <- Opto.OFT.Females.LC 
+
+c5 <- BoxplotMP(Subdata6, x=Group, y=Distance_Per, z=Group) + scale_y_continuous(breaks=seq(0, 350, 50), limits=c(0, 350))
+
+c6 <- BoxplotMP(Subdata6, x=Group, y=Center_Per, z=Group) + scale_y_continuous(breaks=seq(0, 350, 50), limits=c(0, 350))
+
+c7 <- BoxplotMP(Subdata6, x=Group, y=Supported_Per, z=Group) + scale_y_continuous(breaks=seq(0, 350, 50), limits=c(0, 350))
+
+c8 <- BoxplotMP(Subdata6, x=Group, y=Unsupported_Per, z=Group) + scale_y_continuous(breaks=seq(0, 350, 50), limits=c(0, 350))
+
+optoOFTplotsf_Per <- plot_grid(c5, c6, c7, c8, labels = c("A","","",""))
+Plots_OFT_Females_Per <- plot_grid(titelf,optoOFTplotsf_Per, rel_heights = c(0.1,1),ncol = 1)
+
+Plots_OFT_Females_Per
+```
+#Statistics for combined OFT data
+```{r}
+#For Males
+var.test(Distance_Per ~ Group, data=Subdata5)
+var.test(Center_Per ~ Group, data=Subdata5)
+var.test(Supported_Per ~ Group, data=Subdata5)
+var.test(Unsupported_Per ~ Group, data=Subdata5)
+
+t.test(formula = Distance_Per ~ Group, data=Subdata5)
+t.test(formula = Center_Per ~ Group, data=Subdata5, var.equal = TRUE)
+t.test(formula = Supported_Per ~ Group, data=Subdata5, var.equal = TRUE)
+t.test(formula = Unsupported_Per ~ Group, data=Subdata5, var.equal = TRUE)
+
+#For Females
+t.test(formula = Distance_Per ~ Group, data=Subdata6)
+t.test(formula = Center_Per ~ Group, data=Subdata6)
+t.test(formula = Supported_Per ~ Group, data=Subdata6)
+t.test(formula = Unsupported_Per ~ Group, data=Subdata6)
+
+```
+
+# Save combined OFT data as pdf
+
+```{r}
+pdf("Results_Combined_Opto_OFT_males.pdf", width = 12, height = 10)
+print(Plots_OFT_Males_Per)
+
+dev.off()
+
+pdf("Results_Combined_Opto_OFT_females.pdf", width = 12, height = 10)
+print(Plots_OFT_Females_Per)
+
+dev.off()
+
+```
+
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Analysis of retrograde optogenetic LC-HC activation in the OFT as % of control
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+```{r}
+Plots_retroOFT <- list()
+
+
+titel <- ggplot() + ggtitle("Opto9")
+Subdata9 <- OFT[OFT$Experiment == 'Opto9',]
+
+
+r1 <- BoxplotMP(Subdata9, x=Group, y=Distance_Per, z=Group)+ scale_y_continuous(breaks=seq(0, 250, 50), limits=c(0, 250))
+
+r2 <- BoxplotMP(Subdata9, x=Group, y=Center_Per, z=Group)+ scale_y_continuous(breaks=seq(0, 250, 50), limits=c(0, 250))
+
+r3 <- BoxplotMP(Subdata9, x=Group, y=Supported_Per, z=Group)+ scale_y_continuous(breaks=seq(0, 250, 50), limits=c(0, 250))
+
+r4 <- BoxplotMP(Subdata9, x=Group, y=Unsupported_Per, z=Group)+ scale_y_continuous(breaks=seq(0, 250, 50), limits=c(0, 250))
+
+retroOFTplots <- plot_grid(r1, r2, r3, r4, labels = c("A","","",""))
+Plots_retroOFT <- plot_grid(titel,retroOFTplots, rel_heights = c(0.1,1),ncol = 1)
+
+Plots_retroOFT
+
+```
+#Statistics for retro OFT data
+```{r}
+#For Males
+t.test(formula = Distance_Per ~ Group, data=Subdata9)
+t.test(formula = Center_Per ~ Group, data=Subdata9)
+t.test(formula = Supported_Per ~ Group, data=Subdata9)
+t.test(formula = Unsupported_Per ~ Group, data=Subdata9)
+
+```
+#Save as pdf
+
+```{r}
+pdf("Results_retrogradeOFT.pdf", width = 12, height = 10)
+print(Plots_retroOFT)
+
+dev.off()
+```
+
+
+

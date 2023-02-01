@@ -1,0 +1,234 @@
+---
+title: "Privitera et. al 2023- Analysis of HPLC and cFos data in figures 1 and 2 and related figures"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load Libraries and functions
+```{r, echo=FALSE}
+
+library(reshape2)
+library(knitr)
+library(tidyverse)
+library(devtools)
+library(gridExtra)
+library(dplyr)
+library(Hmisc)
+library(ggplot2)
+library(edgeR)
+library(tidyr)
+library(ggthemes)
+library(rlang)
+library(SEtools)
+library(ggplot2)
+source("Functions.R")
+set.seed(123)
+sessionInfo()
+```
+
+#Load data
+```{r}
+# Figure 2b and Supplementary Figure 2a
+
+Yohi1 <- read.csv("../19122022_cFos-HPLC_Analysis/Data/Yohi1_HPLC-cFos_data.csv", sep = ";")
+
+
+#Convert "," to "." deliminations so R can work with the file
+Yohi1$cFos <- trimws(gsub(',','.',Yohi1$cFos,fixed=T))
+Yohi1$MHPG.NA <- trimws(gsub(',','.',Yohi1$MHPG.NA,fixed=T))
+Yohi1$cFos <- as.numeric(Yohi1$cFos)
+Yohi1$MHPG.NA <- as.numeric(Yohi1$MHPG.NA)
+
+#-----------------------------------------------------------
+# Figure 2g
+Dre2_cFos <- read.csv("../19122022_cFos-HPLC_Analysis/Data/Dre2_cFos.csv", sep = ";")
+#Dre2_cFos <- rename(Dre2_cFos, Group = ï..Group)
+Dre2_cFos$Group <- factor(Dre2_cFos$Group,levels = c("L-hM3Dq-", "R-hM3Dq-","L-hM3Dq+", "R-hM3Dq+"))
+
+#-----------------------------------------------------------
+
+# Figure 2j
+cFos <- read.csv("../19122022_cFos-HPLC_Analysis/Data/Opto7_cFos.csv", sep = ",")
+#cFos <- cFos %>% select(-one_of('X', 'X.1','X.2', 'X.3', 'X.4', 'X.5','X.6', 'X.7', 'X.8', 'X.9','X.10'))
+cFos$Group <- factor(cFos$Group,levels = c("LH-ChR2-", "RH-ChR2-","LH-ChR2+", "RH-ChR2+"))
+cFos$Timepoint <- factor(cFos$Timepoint)
+cFos45 <- subset(cFos, Timepoint == "45_min")
+cFos90 <- subset(cFos, Timepoint == "90_min")
+
+## Figure 2k
+HPLC <- read.csv("../19122022_cFos-HPLC_Analysis/Data/Opto7_HPLC results_including 342-360.csv", sep = ",")
+#HPLC <- rename(HPLC, Group = ï..Group)
+HPLC <- HPLC %>% select(-one_of('X', 'X.1','X.2', 'X.3', 'X.4'))
+HPLC45 <- subset(HPLC, Timepoint == "45min")
+HPLC90 <- subset(HPLC, Timepoint == "90min")
+
+#-----------------------------------------------------------
+#Figure 3e
+HPLC9 <- read.csv("../19122022_cFos-HPLC_Analysis/Data/Opto9_HPLC Cortex-dHC.csv", sep = ",")
+
+HPLC9$Group <- factor(HPLC9$Group,levels = c("Homecage","ChR2-", "ChR2+"))
+HPLC9 <- filter(HPLC9, Group != "Homecage")
+
+HPLC9Crx <- subset(HPLC9, Tissue == "Cortex")
+HPLC9dHC <- subset(HPLC9, Tissue == "RH-dHC")
+```
+
+##cFos analysis
+
+
+
+# Figure 2b: Yohimbine induced LC activation, cFos 
+
+```{r}
+Fig2b <- BoxplotMP(Yohi1, Group, cFos, Group) + scale_color_manual(values=c("grey18", "firebrick4")) + ylim(0,100) + facet_grid(~Timepoint)
+
+Fig2b
+```
+
+# Figure 2b: Stats
+```{r}
+t.test(formula = cFos ~ Group, data=Yohi1)
+```
+
+
+
+# Figure 2g: Chemogenetic LC activation, cFos
+```{r}
+Fig2g <- BoxplotMP(Dre2_cFos, Group, cFos, Group) + 
+  ylim(0,80) + 
+  scale_color_manual(values=c("grey18", "grey18", "firebrick", "firebrick")) +
+  facet_grid(~Timepoint)
+
+Fig2g
+```
+
+# Figure 2g: Stats
+```{r}
+ANOVADre2 <- aov(cFos ~ Group, data = Dre2_cFos)
+# Summary of the analysis
+summary(ANOVADre2)
+TukeyHSD(ANOVADre2)
+
+ANOVADre2
+```
+
+
+# Figure 2j: Optogenetic LC activation, cFos 
+```{r}
+Fig2j <- BoxplotMP(cFos, Group, cFos, Group) + scale_color_manual(values=c("grey18", "grey18", "grey18", "steelblue")) + ylim(0,80) + facet_grid(~Timepoint)
+
+Fig2j
+```
+
+# Figure 2j: Stats
+```{r}
+# Compute the analysis of variance for 45min
+ANOVA45 <- aov(cFos ~ Group, data = cFos45)
+# Summary of the analysis
+summary(ANOVA45)
+
+TukeyHSD(ANOVA45)
+
+
+
+# Compute the analysis of variance for 90min
+ANOVA90 <- aov(cFos ~ Group, data = cFos90)
+# Summary of the analysis
+summary(ANOVA90)
+TukeyHSD(ANOVA90)
+```
+
+
+## HPLC analysis
+
+# Supplementary Figure 2a: Yohimbine induced cortical NA turnover
+
+```{r}
+
+FigS2a <- BoxplotMP(Yohi1, Group, MHPG.NA, Group) +  scale_color_manual(values=c("grey18", "firebrick4"))+ ylim(0,0.7) + facet_grid(~Timepoint)
+
+FigS2a
+
+```
+
+# Supplementary Figure 2a: Stats
+
+```{r}
+t.test(formula = MHPG.NA ~ Group, data=Yohi1)
+```
+
+# Figure 2k: Optogenetic LC activation induced cortical NA turnover 
+
+```{r}
+
+Fig2k <- BoxplotMP(HPLC, Virus, MHPG.NA, Virus) +  scale_color_manual(values=c("grey18", "steelblue"))+ ylim(0,0.5) + facet_grid(~Timepoint)
+
+Fig2k
+```
+
+
+
+# Statistics HPLC
+```{r}
+t.test(formula = MHPG.NA ~ Group, data=HPLC2_45)
+t.test(formula = MHPG.NA ~ Group, data=HPLC2_90)
+```
+# Figure 3e: Retrograde LC-HC neuron activation induced NA turnover
+```{r}
+Fig3e <- BoxplotMP(HPLC9, Group, MHPG.NA, Group) + ylim(0,0.3) + facet_grid(~Tissue)
+
+Fig3e
+```
+# Figure 3e: Stats
+```{r}
+
+#Cortex HPLC 
+t.test(formula = MHPG.NA ~ Group, data=HPLC9Crx)
+
+#Cortex dHC 
+t.test(formula = MHPG.NA ~ Group, data=HPLC9dHC)
+
+```
+
+
+#Export graphs
+
+```{r}
+
+#Yohi1
+pdf(file="../19122022_cFos-HPLC_Analysis/Figures/Fig2b.pdf", width = 24, height=12)
+print(Fig2b)
+dev.off()
+
+#Dre2
+pdf(file="../19122022_cFos-HPLC_Analysis/Figures/Fig2g.pdf", width = 24, height=12)
+print(Fig2g)
+dev.off()
+
+#Opto7
+pdf(file="../19122022_cFos-HPLC_Analysis/Figures/Fig2j.pdf", width = 24, height=12)
+print(Fig2j)
+dev.off()
+
+#Opto7
+pdf(file="../19122022_cFos-HPLC_Analysis/Figures/Fig2k.pdf", width = 24, height=12)
+print(Fig2k)
+dev.off()
+
+#Yohi1
+pdf(file="../19122022_cFos-HPLC_Analysis/Figures/Fig2a.pdf", width = 24, height=12)
+print(FigS2a)
+dev.off()
+
+#Opto9
+pdf(file="../19122022_cFos-HPLC_Analysis/Figures/Fig3e.pdf", width = 24, height=12)
+print(Fig3e)
+dev.off()
+```
+
+
+
+

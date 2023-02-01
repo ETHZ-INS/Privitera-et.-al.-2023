@@ -1,0 +1,187 @@
+---
+title: "Privitera et. al 2023 - Analysis of Figure 4 and related Figures"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# required libraries
+
+```{r, echo=FALSE}
+library(edgeR)
+library(SummarizedExperiment)
+library(SEtools)
+library(plgINS)
+library(ggplot2)
+library(DESeq2)
+library(sva)
+library(cowplot)
+library(dplyr)
+library(xlsx)
+library(sechm)
+library(topGO)
+library(GOplot)
+source("../19122022_Figure4_Analysis/Functions.R")
+set.seed(123)
+sessionInfo()
+
+```
+
+# Load SE data
+
+```{r}
+TimeFST <- readRDS("../19122022_Figure4_Analysis/Data/TimeSeriesFST.SE.rds")
+CSI1 <- readRDS("../19122022_Figure4_Analysis/Data/CSI1.SE.rds")
+snSEQ <- readRDS("../19122022_Figure4_Analysis/Data/snRNAseq.SE.rds")
+se <- readRDS("../19122022_Figure4_Analysis/Data/AstroTRAP_Ncom.SE.rds")
+```
+
+# Figure 4b,d,f: A deeper look at target genes across published data sets (Floriou-Servou et. al 2018, von Ziegler et. al 2022)
+
+```{r}
+
+t4 <- c("Dio2", "Ppp1r3c", "Ppp1r3g", "Sik1", "Nr4a1")
+
+
+pCSI1 <- meltSE_LvZ(CSI1,t4, assays = "corrected")
+Fig4b <- BoxplotMP(pCSI1,Condition2, value, Condition) + 
+  scale_color_manual(values=c("grey18", "purple", "firebrick", "darkgreen", "orange")) +
+  facet_grid(feature~Region, scales = "free") + 
+  ylab("Relative expression")
+
+Fig4b
+
+pTimeFST <-meltSE_LvZ(TimeFST,t4, assays = "corrected")
+Fig4d <- BoxplotMP(pTimeFST,Condition2, value, Condition2) +
+      scale_color_manual(values=c("grey18", "firebrick", "grey30", "purple", "royalblue", "palegreen4")) +
+      facet_grid(feature~Region, scales = "free") +
+       ylab("Relative expression")
+
+Fig4d
+
+
+psnSEQ <- meltSE_LvZ(snSEQ,t4, assays = "logcpm")
+psnSEQ2 <- subset(psnSEQ, cluster == 'Astrocytes' | cluster =='Excitatory\nNeurons' | cluster =='Inhibitory\nNeurons' | cluster =='Oligodendrocytes' | cluster =='Vascular')
+
+Fig4f <- BoxplotMP(psnSEQ2, cluster, value, condition) + 
+  scale_color_manual(values=c("grey18", "firebrick")) +
+  facet_grid(~feature, scales = "free") + 
+  ylab("logcpm")
+
+
+Fig4f
+
+```
+
+
+
+#Figure 4h: Analysis of AstroTrap dataset (GSE126172) published by Murphy-Royal et. al 2020
+
+## Statistical analysis of all genes
+
+Analyse TRAP data by comparing expression between stressed and control mice
+
+```{r}
+
+se_TRAP <- se[,se$SampleProcessing == "Astro-TRAP"]
+
+Results <- list()
+
+y <- DGEList(counts = assays(se_TRAP)$counts,group = se_TRAP$Condition)
+y <- calcNormFactors(y)
+y <- estimateDisp(y)
+y <- y[filterByExpr(y,group = se_TRAP$Condition),]
+Results[["AllGenes"]] <- exactTest(y)
+
+#sig_genes <- rownames(topTags(Results[["AllGenes"]]))
+
+#VolcanoPlotsEdgeR(Results, lab = sig_genes)
+
+test <- SEtools::meltSE(se_TRAP,"Dio2")
+```
+
+## Statistical analysis of target genes
+
+TGs: Dio2, Ppp1r3c, Ppp1r3g und Sik1
+
+```{r}
+se_selection <- se_TRAP
+targets <- c("Dio2", "Ppp1r3c","Ppp1r3g", "Sik1")
+
+y <- DGEList(counts = assays(se_selection)$counts,group = se_selection$Condition)
+y <- calcNormFactors(y) # 
+y <- estimateDisp(y)
+y <- y[c("Dio2", "Ppp1r3c","Ppp1r3g", "Sik1"),]
+
+y <- y[filterByExpr(y,group = se_selection$Condition),]
+Results[["OnlySelectedGenes"]] <- exactTest(y)
+Results[["OnlySelectedGenes"]]
+topTags(Results[["OnlySelectedGenes"]])
+
+# Andere Variante wäre:
+topTags(Results[["AllGenes"]][targets,])
+```
+
+Create boxplots
+
+```{r}
+
+pdat3 <- SEtools::meltSE(se_TRAP, genes = "Dio2")
+A1 <- BoxplotMP(pdat3, Condition, logcpm, Condition) +
+   scale_color_manual(values= c("grey18","firebrick"))+
+
+  facet_grid(~feature, scales = "free")
+
+pdat4 <- SEtools::meltSE(se_TRAP, genes = "Ppp1r3c")
+A2 <- BoxplotMP(pdat4, Condition, logcpm, Condition) +
+   scale_color_manual(values= c("grey18","firebrick"))+
+
+  facet_grid(~feature, scales = "free")
+
+pdat5 <- SEtools::meltSE(se_TRAP, genes = "Ppp1r3g")
+A3 <- BoxplotMP(pdat5, Condition, logcpm, Condition) +
+   scale_color_manual(values= c("grey18","firebrick"))+
+
+  facet_grid(~feature, scales = "free")
+
+pdat6 <- SEtools::meltSE(se_TRAP, genes = "Sik1")
+A4 <- BoxplotMP(pdat6, Condition, logcpm, Condition) +
+   scale_color_manual(values= c("grey18","firebrick"))+
+
+  facet_grid(~feature, scales = "free")
+
+Fig4h <- plot_grid(A1,A2,A3,A4,nrow = 1,rel_widths = c(1,1,1,1)) 
+
+Fig4h
+
+```
+
+
+
+#Export figures
+
+```{r}
+pdf(file="../19122022_Figure4_Analysis/Figures/Fig4.pdf", width = 24, height=12)
+print(Fig4b)
+dev.off()
+```
+
+```{r}
+pdf(file="../19122022_Figure4_Analysis/Figures/Fig4.pdf", width = 24, height=12)
+print(Fig4d)
+dev.off()
+```
+
+```{r}
+pdf(file="../19122022_Figure4_Analysis/Figures/Fig4.pdf", width = 24, height=12)
+print(Fig4f)
+dev.off()
+```
+
+```{r}
+pdf(file = "../19122022_Figure4_Analysis/Figures/Fig4h.pdf", width = 6, height = 4)
+print(Fig4h)
+dev.off()
+```

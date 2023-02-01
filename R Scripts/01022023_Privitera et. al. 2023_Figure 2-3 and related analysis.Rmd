@@ -1,0 +1,584 @@
+---
+title: "Privitera et. al 2023- Analysis of Figure 2, 3 and related Figures"
+output:
+  html_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# required libraries
+
+```{r, echo=FALSE}
+library(edgeR)
+library(SummarizedExperiment)
+library(SEtools)
+library(plgINS)
+library(ggplot2)
+library(DESeq2)
+library(sva)
+library(cowplot)
+library(xlsx)
+library(sechm)
+source("../19122022_Figure2_Analysis/Functions.R")
+set.seed(123)
+sessionInfo()
+```
+
+# Load SE data
+
+```{r}
+opto_vHC <- readRDS("../19122022_Figure2_Analysis/Data/OptoTranscriptomics_Seq1Only.vHC.SE.rds")
+opto_dHC <- readRDS("../19122022_Figure2_Analysis/Data/OptoTranscriptomics_Seq1Only.dHC.SE.rds")
+DREADD_vHC <- readRDS("../19122022_Figure2_Analysis/Data/DREADDTranscriptomics.vHC.SE.rds")
+DREADD_dHC <- readRDS("../19122022_Figure2_Analysis/Data/DREADDTranscriptomics.dHC.SE.rds")
+retro_opto <- readRDS("../19122022_Figure2_Analysis/Data/OPTO9.SE.Rds")
+
+
+DREADD <- cbind(DREADD_vHC[intersect(rownames(DREADD_vHC),rownames(DREADD_dHC)),],DREADD_dHC[intersect(rownames(DREADD_vHC),rownames(DREADD_dHC)),])
+DREADD <- dosvacor(DREADD, form = ~Virus + Region, form0 = ~Region)
+DREADD <- DREADD[,order(DREADD$Region,DREADD$Virus)]
+
+opto <- cbind(opto_vHC[intersect(rownames(opto_vHC),rownames(opto_dHC)),],opto_dHC[intersect(rownames(opto_vHC),rownames(opto_dHC)),])
+opto <- dosvacor(opto, form = ~Condition2 + Region, form0 = ~Region)
+opto <- opto[,order(opto$Region,opto$TimePoint,opto$Virus)]
+
+mincount <- 30
+Results <- list()
+```
+
+
+## Figure 2h: Chemogenetic LC activation
+
+Volcanoplots that show the significant genes upon chemogenetic activation of LC
+
+```{r}
+DREADD_vHC <- dosvacor(DREADD_vHC, form = ~Virus)
+DREADD_dHC <- dosvacor(DREADD_dHC, form = ~Virus)
+
+y <- DGEList(counts=assays(DREADD_vHC)$counts,group = DREADD_vHC$Virus)
+y <- calcNormFactors(y)
+y <- estimateDisp(y)
+y <- y[filterByExpr(y,group = DREADD_vHC$Virus, min.count = mincount),]
+Results[["DREADD_vHC"]] <- exactTest(y)
+
+y <- DGEList(counts=assays(DREADD_dHC)$counts,group = DREADD_dHC$Virus)
+y <- calcNormFactors(y)
+y <- estimateDisp(y)
+y <- y[filterByExpr(y,group = DREADD_dHC$Virus, min.count = mincount),]
+Results[["DREADD_dHC"]] <- exactTest(y)
+
+sig_DREADD_vHC <- rownames(topTags(Results[["DREADD_vHC"]], n = Inf, p.value = 0.05))
+sig_DREADD_dHC <- rownames(topTags(Results[["DREADD_dHC"]], n = Inf, p.value = 0.05))
+
+Fig2h <- VolcanoPlotsEdgeRMP(Results[c("DREADD_vHC","DREADD_dHC")],limits = c(-2,2), lab = union(sig_DREADD_vHC,sig_DREADD_dHC))
+```
+
+
+
+## Figure 2m: Optogenetic LC activation
+
+Volcanoplots that show the significant genes upon optogenetic activation of LC at 45min and 90min (vHC only)
+
+
+```{r}
+opto_vHC <- dosvacor(opto_vHC, form = ~Condition2)
+opto_dHC <- dosvacor(opto_dHC, form = ~Condition2)
+
+opto_vHC_45min <- opto_vHC[,opto_vHC$TimePoint == "45min"]
+opto_vHC_90min <- opto_vHC[,opto_vHC$TimePoint == "1h30min"]
+
+y <- DGEList(counts=assays(opto_vHC_45min)$counts,group = opto_vHC_45min$Virus)
+y <- calcNormFactors(y)
+y <- estimateDisp(y)
+y <- y[filterByExpr(y,group = opto_vHC_45min$Virus, min.count = mincount),]
+Results[["opto_vHC_45min"]] <- exactTest(y)
+
+y <- DGEList(counts=assays(opto_vHC_90min)$counts,group = opto_vHC_90min$Virus)
+y <- calcNormFactors(y)
+y <- estimateDisp(y)
+y <- y[filterByExpr(y,group = opto_vHC_90min$Virus, min.count = mincount),]
+Results[["opto_vHC_1h30min"]] <- exactTest(y)
+
+
+opto_dHC_45min <- opto_dHC[,opto_dHC$TimePoint == "45min"]
+opto_dHC_90min <- opto_dHC[,opto_dHC$TimePoint == "1h30min"]
+
+y <- DGEList(counts=assays(opto_dHC_45min)$counts,group = opto_dHC_45min$Virus)
+y <- calcNormFactors(y)
+y <- estimateDisp(y)
+y <- y[filterByExpr(y,group = opto_dHC_45min$Virus, min.count = mincount),]
+Results[["opto_dHC_45min"]] <- exactTest(y)
+
+y <- DGEList(counts=assays(opto_dHC_90min)$counts,group = opto_dHC_90min$Virus)
+y <- calcNormFactors(y)
+y <- estimateDisp(y)
+y <- y[filterByExpr(y,group = opto_dHC_90min$Virus, min.count = mincount),]
+Results[["opto_dHC_1h30min"]] <- exactTest(y)
+
+
+sig_opto_vHC_45min <- rownames(topTags(Results[["opto_vHC_45min"]], n = Inf, p.value = 0.05))
+sig_opto_vHC_90min <- rownames(topTags(Results[["opto_vHC_1h30min"]], n = Inf, p.value = 0.05))
+
+Fig2m <- VolcanoPlotsEdgeRMP(Results[c("opto_vHC_45min","opto_vHC_1h30min")], lab = union(sig_opto_vHC_45min,sig_opto_vHC_90min))
+```
+
+
+## Figure 2n: Genes with similar effect NA response across all experiments
+
+In this analysis the three experiments (yoh, opto and dreadd) are combined again, however this time we consider the "stimulation" to be of the same type, i.e we combine all test groups and run a statistical test for it. this type of analysis will be sensitive to genes that respond very consistently to NA stimulation across all three experiments
+
+```{r}
+
+STR2 <- readRDS("../19122022_Figure2_Analysis/Data/STR2.vHC.SE.rds")
+#Option A, statistical method, all combined
+
+Yoh <- STR2[,STR2$Condition2 %in% c("Saline-Ctrl","Saline-Yohimbine")]
+Yoh$Condition3 <- ifelse(Yoh$Condition == "Homecage","Control","Test")
+DREADD2 <- DREADD[,DREADD$Region == "vHC"]
+DREADD2$Condition3 <- ifelse(DREADD2$Virus == "Control","Control","Test")
+opto_vHC_45min$Condition3 <- ifelse(opto_vHC_45min$Virus == "Control","Control","Test")
+
+m <- mergeSEs(ll = list(Yohimbne = Yoh, DREADD = DREADD2, Opto = opto_vHC_45min),commonOnly =TRUE,keepRowData = FALSE,do.scale = FALSE,use.assays = "counts")
+m$Condition3 <- as.factor(m$Condition3)
+m$Experiment <- as.factor(m$Experiment)
+
+m <- dosvacor(m, form = ~Experiment + Condition3, form0 = ~Experiment)
+
+m_design <- model.matrix(~m$Condition3 + m$Experiment)
+
+y <- DGEList(counts=assays(m)$counts)
+y <- calcNormFactors(y)
+y <- estimateDisp(y,m_design)
+#filter out genes that are low expressed
+y <- y[filterByExpr(y, m_design, min.count = mincount),]
+m_fit <- glmQLFit(y,m_design)
+
+res <- glmQLFTest(m_fit, colnames(m_design)[2])
+
+m <- m[,order(m$Condition3)]
+
+
+#Adjust heatmap colors
+metadata(m)$hmcols <- c("royalblue","white","firebrick4")
+
+
+Fig2n <- sechm(m,
+      rownames(topTags(res,n = Inf, p.value = 0.05)),
+      assayName = "corrected",
+      do.scale = T, 
+      top_annotation = c("Experiment","Condition3"),
+      gaps_at = c("Experiment"))
+Fig2n
+
+```
+
+
+## Figure 2o, Supplementary Figure 4 and Supplementary Table: Aggregate across datasets
+
+Here we do the following to detect genes that are responsive across datasets:
+we see which position (by significane) a gene is in a given analysis (1st, 2nd, 3rd etc)
+we then sum up all these positions across the relevant analyses
+this gives us a ranking of genes by NA responsiveness
+
+```{r}
+Results2 <- readRDS("../19122022_Figure2_Analysis/Data/Results_stats.Rds")
+
+datasets <- c("STR2v_StressvsPropr","STR2d_StressvsPropr","STR3_InteractionPropranolol","DREADD_vHC","DREADD_dHC","opto_vHC_45min")
+
+#Create pvalue data frame across the selected analyses
+pvals <- data.frame(Results2[[datasets[1]]]$table[,"PValue"])
+rownames(pvals) <- rownames(Results2[[datasets[1]]]$table)
+pvals$gene <- rownames(pvals)
+for(i in datasets[-1]){
+  targets <- intersect(rownames(pvals),rownames(Results2[[i]]$table))
+  pvals <- pvals[targets,]
+  pvals <- cbind(pvals,Results2[[i]]$table[targets,"PValue"])
+}
+
+pvals <- na.omit(pvals)
+pvals$gene <- NULL
+
+#get order of each gene in each dataset based on pvalue
+ord <- apply(pvals,MARGIN = 2, FUN = function(x){
+  o <- order(x)
+  r <- 1:length(x)
+  return(r[order(o)])
+})
+rownames(ord) <- rownames(pvals)
+ord <- apply(ord, MARGIN = 1, FUN = sum)
+
+#Top 20 genes
+head(ord[order(ord)],20)
+
+#create plot of top n genes
+n <- 4
+n2 <- 10
+t <- names(ord[order(ord)][1:n])
+t2 <- names(ord[order(ord)][1:n2])
+
+STR2 <- readRDS("../19122022_Figure2_Analysis/Data/STR2_Complete.SE.Rds")
+STR3 <- readRDS("../19122022_Figure2_Analysis/Data/STR3_Complete.SE.Rds")
+STR3 <- STR3[,STR3$Injection != "Sotalol"]
+
+rowData(STR2) <- NULL
+rowData(STR3) <- NULL
+
+pSTR2 <- meltSE_LvZ(STR2,t, assays = "corrected")
+p1 <- ggplot(pSTR2,aes(Condition2, value, color = Condition)) + 
+  geom_boxplot(outlier.shape = NA) + 
+  geom_point(position = position_jitterdodge()) + 
+  facet_grid(feature~Region, scales = "free") + 
+  theme_bw() + theme(legend.position="bottom") + 
+  ylab("relative expression") + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+pSTR3 <-meltSE_LvZ(STR3,t, assays = "corrected")
+pSTR3 <- pSTR3[pSTR3$Injection != "Sotalol",]
+p2 <- ggplot(pSTR3,aes(Injection, value, color = Condition)) +
+  geom_boxplot(outlier.shape = NA) + geom_point(position = position_jitterdodge()) + 
+  facet_grid(feature~Region, scales = "free") + 
+  theme_bw()  + 
+  theme(legend.position="bottom") + 
+  ylab("relative expression") + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+popto <- meltSE_LvZ(opto_vHC,t, assays = "corrected")
+popto$TimePoint <- factor(popto$TimePoint, levels = c("45min","1h30min"))
+p3 <- ggplot(popto,aes(TimePoint, value, color = Virus)) + 
+  geom_boxplot(outlier.shape = NA) + 
+  geom_point(position = position_jitterdodge()) + 
+  facet_grid(feature~Region, scales = "free") + 
+  theme_bw()  + theme(legend.position="bottom") + 
+  ylab("relative expression")+ 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+pDREADD <- meltSE_LvZ(DREADD,t, assays = "corrected")
+p4 <- ggplot(pDREADD,aes(Virus, value, color = Virus)) + 
+  geom_boxplot(outlier.shape = NA) + 
+  geom_point(position = position_jitterdodge()) + 
+  facet_grid(feature~Region, scales = "free") + 
+  theme_bw()  + theme(legend.position="bottom") + 
+  ylab("relative expression")+ 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+FigS4 <- plot_grid(p1,p2,p3,p4,nrow = 1,rel_widths = c(1,0.6,0.6,0.7))
+FigS4
+
+#plot genes by log rank
+
+df_NAgenes <- data.frame(rank = ord[order(ord)], index = 1:length(ord))
+df_NAgenes$lab <- rep(NA,nrow(df_NAgenes))
+df_NAgenes$lab[1:n] <- t
+
+Fig2o <- ggplot(df_NAgenes,aes(index, log10(rank), label = lab)) + geom_point() + theme_bw() + geom_text_repel()
+Fig2o
+
+saveRDS(df_NAgenes,"../19122022_Figure2_Analysis/Data/NAgenes.Rds")
+
+
+#Supplementary Table 1 (Ranking from Fig2o)
+require(writexl)
+df_NAgenes                                                  # Print updated data
+write_xlsx(df_NAgenes, "../19122022_Figure2_Analysis/Figures/Supplementary Table.xlsx")
+```
+
+
+# Supplementary Figure 6: A deeper look at genes associated with neuronal activity
+```{r}
+STR2 <- readRDS("../19122022_Figure2_Analysis/Data/STR2_Complete.SE.Rds")
+STR3 <- readRDS("../19122022_Figure2_Analysis/Data/STR3_Complete.SE.Rds")
+STR3 <- STR3[,STR3$Injection != "Sotalol"]
+
+rowData(STR2) <- NULL
+rowData(STR3) <- NULL
+
+t3 <- c("Fos", "Arc", "Egr1", "Npas4", "Dusp1")
+
+pSTR2 <- meltSE_LvZ(STR2,t3, assays = "corrected")
+p1 <- ggplot(pSTR2,aes(Condition2, value, color = Condition)) + 
+  geom_boxplot(outlier.shape = NA) + 
+  geom_point(position = position_jitterdodge()) + 
+  facet_grid(feature~Region, scales = "free") + 
+  theme_bw() + theme(legend.position="bottom") + 
+  ylab("relative expression") + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+pSTR3 <-meltSE_LvZ(STR3,t3, assays = "corrected")
+pSTR3 <- pSTR3[pSTR3$Injection != "Sotalol",]
+p2 <- ggplot(pSTR3,aes(Injection, value, color = Condition)) +
+  geom_boxplot(outlier.shape = NA) + geom_point(position = position_jitterdodge()) + 
+  facet_grid(feature~Region, scales = "free") + 
+  theme_bw()  + 
+  theme(legend.position="bottom") + 
+  ylab("relative expression") + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+popto <- meltSE_LvZ(opto_vHC,t3, assays = "corrected")
+popto$TimePoint <- factor(popto$TimePoint, levels = c("45min","1h30min"))
+p3 <- ggplot(popto,aes(TimePoint, value, color = Virus)) + 
+  geom_boxplot(outlier.shape = NA) + 
+  geom_point(position = position_jitterdodge()) + 
+  facet_grid(feature~Region, scales = "free") + 
+  theme_bw()  + theme(legend.position="bottom") + 
+  ylab("relative expression")+ 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+pDREADD <- meltSE_LvZ(DREADD,t3, assays = "corrected")
+p4 <- ggplot(pDREADD,aes(Virus, value, color = Virus)) + 
+  geom_boxplot(outlier.shape = NA) + 
+  geom_point(position = position_jitterdodge()) + 
+  facet_grid(feature~Region, scales = "free") + 
+  theme_bw()  + theme(legend.position="bottom") + 
+  ylab("relative expression")+ 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+FigS6 <- plot_grid(p1,p2,p3,p4,nrow = 1,rel_widths = c(1,0.6,0.6,0.7))
+FigS6
+
+```
+
+
+### Figure 3 
+
+## Figure 3b and 3g: Radialplots 
+
+We visualize the response strength of the top NA genes in the retro and optofmri data and produce statistical results for these selected genes (subset for reduced multiple testing correction)
+
+```{r}
+LCopto <- readRDS("../19122022_Figure2_Analysis/Data/LCOptoFmri.SE.rds") 
+LCopto <- LCopto[,LCopto$Tissue == "R-vHC"]
+LCopto <- dosvacor(LCopto,form = ~Group + Sex, form0 = ~Sex)
+
+design <- model.matrix(~LCopto$Group + LCopto$SV1 + LCopto$SV2)
+
+y <- DGEList(counts=assays(LCopto)$counts)
+y <- calcNormFactors(y)
+y <- estimateDisp(y,design)
+#filter out genes that are low expressed
+y <- y[filterByExpr(y, design),]
+
+fit <- glmQLFit(y,design)
+
+Results[["vHC.FullModel"]] <- glmQLFTest(fit, colnames(design)[2:4])
+Results[["vHC.FullModel"]]$table$meanLogFC <- apply(Results[["vHC.FullModel"]]$table,1,FUN = function(x){mean(x[1:3])})
+Results[["vHC.FullModel"]]$table$logFC <- apply(Results[["vHC.FullModel"]]$table,1,FUN = function(x){mean(x[1:3])})
+Results[["vHC.3Hz"]] <- glmQLFTest(fit, colnames(design)[2])
+Results[["vHC.5Hz"]] <- glmQLFTest(fit, colnames(design)[3])
+Results[["vHC.15Hz"]] <- glmQLFTest(fit, colnames(design)[4])
+
+stats <- Results[["retro_opto_CHR2pvsn"]]$table[t2,]
+stats$FDR <- p.adjust(stats$PValue, method = "fdr")
+
+pdat <- data.frame(gene = t2,
+                   logFC.vHC.retro =   Results[["retro_opto_CHR2pvsn"]]$table[t2,"logFC"],
+                   logFC.vHC3Hz = Results[["vHC.FullModel"]]$table[t2,"logFC.LCopto.Group3Hz"],
+                   logFC.vHC5Hz = Results[["vHC.FullModel"]]$table[t2,"logFC.LCopto.Group5Hz"],
+                   logFC.vHC15Hz = Results[["vHC.FullModel"]]$table[t2,"logFC.LCopto.Group15Hz"])
+
+pdat$index <- NULL
+pdat[,c("logFC")] <- NULL
+radial.df <- tidyr::pivot_longer(pdat,cols = -1)
+radial.df$direction = ifelse(radial.df$value >= 0, "up-regulated", "down-regulated")
+radial.df$value <- abs(radial.df$value)
+
+radial.df$name <- factor(radial.df$name, levels = c("logFC.vHC.retro","logFC.vHC3Hz","logFC.vHC5Hz","logFC.vHC15Hz"))
+
+Fig3bg <- ggplot(radial.df, aes(x=gene, y=sqrt(value), fill=gene, color = direction)) +
+    geom_bar(stat='identity') + facet_wrap(~name, nrow = 1) + coord_polar() + scale_color_manual(values= c("red","black")) + theme_bw() + ggtitle("top 10 NA genes in vHC using different stimulation frequencies")
+
+Fig3bg
+
+#stats, different stimulations
+topTags(Results[["vHC.FullModel"]][t2,])
+```
+
+## Figure 3h: NA responsive genes in retrograde optogenetic LC activation
+
+Here we select the top genes from the NA responsivenes analysis and analyse only these genes in the retro opto dataset
+
+```{r}
+retro_opto_CHR2pvsn <- retro_opto[,retro_opto$Group != "HC"]
+retro_opto_CHR2pvsn$Group <- droplevels(retro_opto_CHR2pvsn$Group)
+retro_opto_CHR2pvsn <- dosvacor(retro_opto_CHR2pvsn, form = ~Group)
+
+y <- DGEList(counts=assays(retro_opto_CHR2pvsn)$counts,group = retro_opto_CHR2pvsn$Group)
+y <- calcNormFactors(y)
+y <- estimateDisp(y)
+y <- y[filterByExpr(y,group = retro_opto_CHR2pvsn$Group, min.count = mincount),]
+Results[["retro_opto_CHR2pvsn"]] <- exactTest(y)
+
+tr <- c("Dio2", "Ppp1r3c", "Ppp1r3g", "Sik1", "Nr4a1")
+
+pretro_opto <- meltSE_LvZ(retro_opto_CHR2pvsn,tr, "logcpm")
+
+stats <- Results[["retro_opto_CHR2pvsn"]]$table[tr,]
+stats$FDR <- p.adjust(stats$PValue, method = "fdr")
+
+Fig3h <- BoxplotMP(pretro_opto, Group, value, Group) + 
+  facet_wrap(~feature, scales = "free", nrow = 1)
+
+Fig3h
+stats
+```
+
+## Figure 3i: NA turnover (MHPG/NA) vs Dio2 expression
+
+Here we correlate the MHPG/NA vs Dio2 expression in the retro opto experiment. we run a statistical analysis for correlation one time across all samples, and one time also across the Chr2 positive virus samples only. both are significant
+
+```{r, fig.height= 4, fig.width=6}
+
+library("openxlsx")
+meta <- read.xlsx("../19122022_Figure2_Analysis/Data/Opto9_HPLC_RH-dHC_R.xlsx")[1:34,]
+
+
+assign <- match(colnames(retro_opto_CHR2pvsn), meta$Sample)
+retro_opto_CHR2pvsn$MHPG <- meta[assign,"MHPG"]
+retro_opto_CHR2pvsn$NE <- meta[assign,"NE"]
+retro_opto_CHR2pvsn$ratioMHPGvNE <- retro_opto_CHR2pvsn$MHPG / retro_opto_CHR2pvsn$NE 
+
+#linear correaltion across all samples
+pdat <- meltSE_LvZ(retro_opto_CHR2pvsn,"Dio2", "logcpm")
+mod <- lm(pdat$value ~ pdat$ratioMHPGvNE)
+summary(mod)
+
+#linear correaltion within the ChR2_p group only
+pdat_p <- pdat[pdat$Group == "ChR2_p",]
+mod <- lm(pdat_p$value ~ pdat_p$ratioMHPGvNE)
+summary(mod)
+
+Fig3i <- ggplot(pdat, aes(MHPG/NE,value)) + geom_point(aes(MHPG/NE,value, color = Group)) + theme_bw() + geom_smooth(method = "lm", color = "black", fill = "grey80") + ylab("logcpm")
+Fig3i
+```
+
+
+
+
+## Show Final Figures
+
+#Figure 2
+```{r, fig.height= 4, fig.width=6}
+print(Fig2h)
+```
+
+```{r, fig.height= 4, fig.width=6}
+print(Fig2m)
+```
+
+```{r, fig.height= 4, fig.width=6}
+print(Fig2n)
+```
+
+```{r, fig.height= 4, fig.width=6}
+print(Fig2o)
+```
+
+#Supplementary Figure 4
+```{r}
+print(FigS4)
+```
+
+#Supplementary Figure 6
+```{r}
+print(FigS4)
+```
+
+# Figure 3
+
+```{r, fig.height= 4, fig.width=6}
+print(Fig3bg)
+```
+
+```{r, fig.height= 4, fig.width=6}
+print(Fig3h)
+```
+
+```{r, fig.height= 6, fig.width=8}
+print(Fig3i)
+```
+
+
+## Export Figures
+
+```{r}
+pdf(file = "../19122022_Figure2_Analysis/Figures/Fig2h.pdf", width = 6, height = 4)
+print(Fig2h)
+dev.off()
+
+pdf(file = "../19122022_Figure2_Analysis/Figures/Fig2m.pdf", width = 6, height = 4)
+print(Fig2m)
+dev.off()
+
+pdf(file = "../19122022_Figure2_Analysis/Figures/Fig2n.pdf", width = 6, height = 3)
+print(Fig2n)
+dev.off()
+
+pdf(file = "../19122022_Figure2_Analysis/Figures/Fig2o.pdf", width = 6, height = 8)
+print(Fig2o)
+dev.off()
+
+pdf(file = "../19122022_Figure2_Analysis/Figures/FigS4.pdf", width = 10, height = 10)
+print(FigS4)
+dev.off()
+
+pdf(file = "../19122022_Figure2_Analysis/Figures/FigS5.pdf", width = 10, height = 10)
+print(FigS6)
+dev.off()
+
+pdf(file = "../19122022_Figure2_Analysis/Figures/Fig3g.pdf", width = 10, height = 8)
+print(Fig3bg)
+dev.off()
+
+pdf(file = "../19122022_Figure2_Analysis/Figures/Fig3h.pdf", width = 10, height = 5)
+print(Fig3h)
+dev.off()
+
+pdf(file = "../19122022_Figure2_Analysis/Figures/Fig3b.pdf", width = 8, height = 8)
+print(Fig3i)
+dev.off()
+
+```
+
+
+## Create final data frames (containing corrected expression and Results data as single SE file)
+
+```{r, eval = FALSE}
+
+for(i in names(Results)){
+  Results[[i]]$table$FDR <- p.adjust(Results[[i]]$table$PValue, method = "fdr")
+}
+
+rowData(opto_vHC)$DEA.vHC_45min <- Results$opto_vHC_45min$table[rownames(opto_vHC),]
+attr(rowData(opto_vHC)$DEA.vHC_45min, "description") <- "two group analysis of ChR2 vs control virus analysis after 45min"
+
+rowData(opto_vHC)$DEA.vHC_1h30min <- Results$opto_vHC_1h30min$table[rownames(opto_vHC),]
+attr(rowData(opto_vHC)$DEA.vHC_1h30min, "description") <- "two group analysis of ChR2 vs control virus analysis after 1h30min"
+
+metadata(opto_vHC)$default_view <- list(assay = "corrected", groupvar = "TimePoint", colvar = "Virus")
+metadata(opto_vHC)$description <- "In this experiment the vHC transcriptome of animals in which LC was activated optogenetically 45min or 1h30min prior to sacrifice is tested"
+
+saveRDS(opto_vHC, "../final_data/Opto_Complete.Rds")
+
+rowData(DREADD)$DEA.vHC <- Results$DREADD_vHC$table[rownames(DREADD),]
+attr(rowData(DREADD)$DEA.vHC, "description") <- "two group analysis of hM3Dq vs control virus analysis after 45min in vHC"
+
+rowData(DREADD)$DEA.dHC <- Results$DREADD_dHC$table[rownames(DREADD),]
+attr(rowData(DREADD)$DEA.dHC, "description") <- "two group analysis of hM3Dq vs control virus analysis after 45min in dHC"
+
+metadata(DREADD)$default_view <- list(assay = "corrected", gridvar = "Region", groupvar = "Virus", colvar = "Virus")
+metadata(DREADD)$description <- "In this experiment the vHC and dHC transcriptome of animals in which LC was activated chemogenetically 45min prior to sacrifice is tested"
+
+saveRDS(DREADD, "../final_data/DREADD_Complete.Rds")
+
+rowData(retro_opto_CHR2pvsn)$DEA.ChR2vsControl <- Results$retro_opto_CHR2pvsn$table[rownames(retro_opto_CHR2pvsn),]
+attr(rowData(retro_opto_CHR2pvsn)$DEA.ChR2vsControl, "description") <- "two group analysis of ChR2 vs control retro virus analysis after 45min in vHC"
+
+metadata(retro_opto_CHR2pvsn)$default_view <- list(assay = "corrected", groupvar = "Group", colvar = "Group")
+metadata(retro_opto_CHR2pvsn)$description <- "In this experiment the vHC transcriptome of animals in which LC neurons that project to the hippocampus were activated optogenetically 45min prior to sacrifice is assessed"
+
+saveRDS(retro_opto_CHR2pvsn, "../final_data/RetroOpto_Complete.Rds")
+
+```
