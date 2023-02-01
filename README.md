@@ -1,2 +1,3 @@
-# LC_Opto_Transcriptomics
-Effects of different NA modulations on the acute stress response
+# Noradrenaline release from the locus coeruleus shapes stress-induced hippocampal gene expression
+This repository contains all the data files and R code used in Privitera et. al. 2023
+
