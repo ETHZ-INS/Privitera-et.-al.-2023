@@ -1,0 +1,193 @@
+---
+title: "21092023_Privitera_sexDifferences"
+author: "Pierre-Luc Germain"
+date: "9/21/2023"
+output: html_document
+---
+
+decision: do the interaction in vHC, report absence of significance --> show nothing?
+
+```{r, echo=FALSE}
+library(edgeR)
+library(SummarizedExperiment)
+library(SEtools)
+library(ggplot2)
+library(sechm)
+```
+
+
+```{r}
+intLfcComp <- function(dea1, dea.int, fdr.th=0.05, int.fdr.th=fdr.th, ..., SE=TRUE, allSeg=FALSE,
+                       lfc.th=log2(1.2), groups=c("Females","Males"), genes=NULL, segAlpha=0.5, genesAsX=FALSE,
+                       do.plot=TRUE, fade=TRUE, includeLabels=TRUE, ylab="log2(FC) upon stress"){
+  dea1 <- sechm:::homogenizeDEA(dea1)
+  dea.int <- sechm:::homogenizeDEA(dea.int)
+  dea.int$logFC[is.na(dea.int$logFC)] <- 0
+  dea1$logFC2 <- dea1$logFC+dea.int[row.names(dea1),"logFC"]
+  dea1$int.logFC <- dea.int[row.names(dea1),"logFC"]
+  dea1$int.FDR <- dea.int[row.names(dea1),"FDR"]
+  if("lfcSE" %in% colnames(dea.int)) dea1$int.lfcSE <- pmax(dea1$lfcSE,dea.int[row.names(dea1),"lfcSE"])
+  if(is.null(genes)){
+    genes <- union(getDEGs(dea1, lfc.th=lfc.th, fdr.th=fdr.th),
+                   getDEGs(dea.int, lfc.th=lfc.th, fdr.th=int.fdr.th))
+  }
+  stress2 <- dea1[genes,]
+  stress2$midlfc <- (stress2$logFC2+stress2$logFC)/2
+  stress2$rank <- rank(stress2$logFC2+stress2$logFC)
+  stress2$rank2 <- (rank(stress2$logFC2)+rank(stress2$#' @param coefs The interaction coefficients to test (default all)
+logFC))/2
+  stress2 <- stress2[order(stress2$rank),]
+  stress2$gene <- factor(row.names(stress2), row.names(stress2))
+  stress2$flag <- (stress2$int.FDR<int.fdr.th & abs(stress2$int.logFC)>lfc.th)
+  w2 <- w <- which(stress2$flag)
+  stress3 <- reshape::melt.data.frame(stress2, measure.vars=c("logFC","logFC2"),
+                      id.vars = c("gene","rank","rank2","int.FDR","FDR","flag"))
+  stress3$variable <- factor(stress3$variable)
+  levels(stress3$variable) <- groups
+  
+  if(!do.plot) return(list(df2=stress2, df3=stress3))
+  if(fade){
+    p <- ggplot(stress3, aes(rank, value, colour=variable, alpha=-log10(int.FDR)))
+  }else if(genesAsX){
+    p <- ggplot(stress3, aes(gene, value, colour=variable))
+  }else{
+    p <- ggplot(stress3, aes(rank, value, colour=variable))
+  }
+  p <- p + geom_hline(yintercept=0, linetype="dashed", colour="gray")
+  if(SE && "lfcSE" %in% colnames(stress2)) p <- p + 
+    geom_segment(data=stress2[which(abs(stress2$logFC)>lfc.th),],
+                 aes(x=rank, xend=rank, y=logFC-lfcSE, yend=logFC+lfcSE),
+                 colour="#F8766D", alpha=0.5)
+  if(SE && "int.lfcSE" %in% colnames(stress2)) p <- p + 
+    geom_segment(data=stress2[which(abs(stress2$int.logFC)>lfc.th),],
+                 aes(x=rank, xend=rank, y=logFC2-int.lfcSE, yend=logFC2+int.lfcSE),
+                 colour="00BFC4", alpha=0.5)
+  if(allSeg) w2 <- seq_len(nrow(stress2))
+  p <- p + geom_segment(data=stress2[w2,], aes(x=rank, xend=rank, y=logFC, yend=logFC2),
+                        alpha=segAlpha, colour="black") + 
+    geom_point(...) + labs(x="Rank of average logFC", y=ylab)
+  if(!includeLabels) return(p)
+  p <- p +
+    ggrepel::geom_text_repel(data=stress2[w,], aes(rank, midlfc, label=gene), 
+      min.segment.length=0, segment.linetype="dotted",
+      nudge_y=sign(stress2[w,"midlfc"]), colour="black")
+  p
+}
+```
+
+
+
+# Ventral
+
+```{r}
+lu <- readRDS("/mnt/bohacek/SEs_for_SEV/Swim_Male_vs_Female.SE.rds")
+lu <- lu[,lu$TimePoint %in% c("0min","45min")]
+ma <- readRDS("/mnt/bohacek/SEs_for_SEV/STR3.SE.rds")
+ma$Sex <- tools::toTitleCase(ma$Sex)
+ma <- ma[,grep("^PBS",ma$Condition2)]
+ma$TimePoint <- ma$Condition
+levels(ma$TimePoint) <- c("0min","45min")
+ts <- readRDS("/mnt/bohacek/SEs_for_SEV/TimeSeriesFST.SE.rds")
+ts <- ts[,ts$TimePoint %in% c("0min","45min") & ts$Region=="vHC"]
+se <- readRDS("/mnt/bohacek/SEs_for_SEV/Stressome1.SE.rds")
+se <- se[,se$Region=="vHC"]
+g <- table(unlist(lapply(list(lu,ma,ts,se), FUN=row.names)))
+g <- names(g[g==4])
+ll <- lapply(list(lu,ma,ts,se), FUN=function(x){
+  colData(x) <- colData(x)[,c("Sex","Experiment","TimePoint")]
+  x[g,]
+})
+mse <- SEtools::mergeSEs(ll, do.scale = FALSE, keepRowData = FALSE)
+mse <- mse[,mse$TimePoint %in% c("0min","45min")]
+mse$TimePoint <- droplevels(mse$TimePoint)
+mse <- mse[,order(mse$TimePoint, mse$Sex, mse$Experiment)]
+vh <- mse
+table(mse$Sex, mse$TimePoint)
+```
+
+(In the absence of surrogate variable analysis, not a single gene has an interaction FDR lower than 1)
+
+```{r}
+set.seed(123)
+mse <- SEtools::svacor(mse, ~Experiment+Sex*TimePoint, ~Experiment, n.sv=3)
+```
+
+```{r}
+mse <- sechm::log2FC(mse, fromAssay = "corrected", controls = mse$TimePoint=="0min", isLog=TRUE)
+```
+
+```{r}
+dds <- calcNormFactors(DGEList(assay(mse)))
+fo <- paste0(c("~Experiment",grep("^SV", colnames(colData(mse)), value=TRUE), "Sex*TimePoint"), collapse="+")
+mm <- model.matrix(as.formula(fo), data=as.data.frame(colData(mse)))
+dds <- dds[filterByExpr(dds, mm, min.count=20),]
+dds <- estimateDisp(dds,mm)
+fit <- glmQLFit(dds,mm)
+stress <- as.data.frame(topTags(glmQLFTest(fit, "TimePoint45min"), Inf))
+sdegs <- row.names(stress)[which(stress$FDR<0.05)]
+int1 <- as.data.frame(topTags(glmQLFTest(fit[sdegs,], "SexFemale:TimePoint45min"), Inf))
+head(int1)
+sex <- as.data.frame(topTags(glmQLFTest(fit, "SexFemale"),Inf))
+rowData(mse)$DEA.TimePoint45min <- stress[row.names(mse),]
+rowData(mse)$DEA.Sex <- sex[row.names(mse),]
+rowData(mse)$DEA.interaction <- as.data.frame(topTags(glmQLFTest(fit, "SexFemale:TimePoint45min"), Inf))[row.names(mse),]
+saveRDS(mse, file="vhc_sex.SE.rds")
+```
+
+
+```{r}
+intLfcComp(getDEA(mse, "TimePoint45min"),
+           getDEA(mse, "interaction"), allSeg=TRUE,
+           int.fdr.th=0.05, lfc.th=0, fdr.th = 0.05, groups=c("males","females"), fade=FALSE) +
+  theme_classic()
+```
+
+
+
+```{r}
+prop <- readRDS("/mnt/bohacek/Lukas/Github/LC_Opto_Trancriptomics/final_data/propInteractions.rds")
+propDegs <- row.names(topTags(prop$combined, n=Inf, p=0.05))
+g <- intersect(propDegs,row.names(mse))
+p1 <- intLfcComp(getDEA(mse, "TimePoint45min"),
+           getDEA(mse, "interaction"), genes=g, allSeg=TRUE,
+           int.fdr.th=0.05, lfc.th=log2(1.1), fdr.th = 0.05, groups=c("Males","Females"), fade=FALSE) + 
+  scale_x_continuous(breaks=seq_along(g), labels=g) + theme_bw() + theme(axis.text.x = element_text(angle=90, hjust=1, vjust=0.5)) + ggtitle("Propranolol-sensitive stress genes")
+```
+
+
+
+```{r}
+library(DESeq2)
+dds <- DESeqDataSetFromMatrix(floor(assay(mse)), colData=colData(mse), design=mm)
+dds <- DESeq(dds)
+stress <- lfcShrink(dds, coef="TimePoint45min")
+int <- lfcShrink(dds, coef="SexFemale.TimePoint45min")
+int2 <- int[row.names(stress)[stress$padj<0.01],]
+int2$FDR <- p.adjust(int2$padj)
+p2 <- intLfcComp(stress, int, int.fdr.th=0.05, lfc.th=log2(1.0), fdr.th = 0.01, groups=c("males","females"), fade=FALSE, size=1) + 
+  theme_bw() + ggtitle("All stress-responsive genes, using apeglm logFC shrinkage")
+```
+
+
+
+```{r}
+mse2 <- readRDS("propranolol.mergedRegions.SE.rds")
+p3 <- intLfcComp(getDEA(mse2, "propranololInteraction"), getDEA(mse2, "propranololInteractionFemales"), genes=propDegs, allSeg=TRUE, int.fdr.th=0.05, lfc.th=0.05, fdr.th = 0.05, groups=c("males","females"), fade=FALSE, segAlpha = 0.3) + 
+  theme_bw() + ylab("Stress:Propranolol interaction log2(FC)") + scale_x_continuous(breaks=seq_along(g), labels=g) + theme(axis.text.x = element_text(angle=90, hjust=1, vjust=0.5)) + ggtitle("Propranolol-sensitive stress genes")
+```
+
+```{r, fig.height=11, fig.width=7}
+pdf("../Figures R/sexDiff.pdf", width=7, height=11)
+cs <- function(x) x + scale_color_manual(values=c(males="grey25", females="darkseagreen",Males="grey25", Females="darkseagreen")) + labs(color="Sex")
+cowplot::plot_grid(cs(p2)+theme_bw()+guides(colour = guide_legend(override.aes = list(size=3))),
+                   cs(p1) + theme_bw() + 
+                     theme(axis.text.x = element_text(angle=90, hjust=1, vjust=0.5), legend.position = "none"), 
+                   cs(p3) + theme(legend.position = "none"), nrow=3,labels="auto",scale=0.95)
+dev.off()
+```
+
+
+```{r}
+sessionInfo()
+```
+
