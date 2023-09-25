@@ -1,0 +1,109 @@
+---
+title: "21092023_Privitera_dorsalVentral"
+author: "Pierre-Luc Germain"
+date: "9/21/2023"
+output: html_document
+---
+
+```{r, echo=FALSE}
+library(edgeR)
+library(SummarizedExperiment)
+library(SEtools)
+library(ggplot2)
+library(sechm)
+```
+
+
+# Propanolol Dorsal/ventral
+
+```{r}
+str2 <- readRDS("/mnt/bohacek/SEs_for_SEV/STR2.SE.rds")
+str2 <- str2[,which(str2$Condition!="Yohimbine" & str2$Injection!="Prazosin")]
+str2$TimePoint <- droplevels(str2$Condition)
+levels(str2$TimePoint) <- c("0min","45min")
+str2$Group <- droplevels(str2$Injection) 
+levels(str2$Group) <- c("PBS","Propranolol")
+
+vh <- readRDS("/mnt/bohacek/SEs_for_SEV/STR3.SE.rds")
+vh$Sex <- tools::toTitleCase(vh$Sex)
+vh$TimePoint <- vh$Condition
+levels(vh$TimePoint) <- c("0min","45min")
+vh <- vh[,!grepl("Sotalol",vh$Injection)]
+vh$Group <- droplevels(vh$Injection) 
+
+dh <- readRDS("../Data/MPJ.dHC.mf.SE.rds")
+dh$Sex <- tools::toTitleCase(dh$Sex)
+dh$Experiment <- "MPJ"
+dh$TimePoint <- dh$Condition
+levels(dh$TimePoint) <- c("0min","45min")
+dh$Region <- dh$Tissue
+
+i <- intersect(row.names(dh),row.names(vh))
+se <- SummarizedExperiment(list(counts=cbind(assay(dh)[i,],assay(vh)[i,],assay(str2)[i,])),
+                           colData=rbind(colData(dh)[,c("Region","Sex","Group","TimePoint")],
+                                         colData(vh)[,c("Region","Sex","Group","TimePoint")],
+                                         colData(str2)[,c("Region","Sex","Group","TimePoint")]))
+se$Region <- factor(se$Region, c("vHC","dHC"))
+se$Sex <- factor(se$Sex, c("Male","Female"))
+mm <- model.matrix(~Sex+Region*Group*TimePoint, data=as.data.frame(colData(se)))
+se <- se[filterByExpr(se,mm,mincount=20),]
+set.seed(1234)
+se <- svacor(se, ~Region*Sex*TimePoint, ~Region, n.sv=3)
+se <- sechm::log2FC(se, "corrected", controls=se$TimePoint=="0min" & se$Group=="PBS", by=se$Region, isLog = TRUE)
+```
+
+
+```{r}
+dds <- calcNormFactors(DGEList(assay(se)))
+mm <- model.matrix(~Region*Sex*TimePoint*Group, data=as.data.frame(colData(se)))
+dds <- dds[filterByExpr(dds,mm,min.count=20),]
+mm <- model.matrix(~SV1+SV2+SV3+Region+Sex*Group*TimePoint+Region*Group*TimePoint+Region:Sex, data=as.data.frame(colData(se)))
+dds <- estimateDisp(dds, mm)
+fit <- glmQLFit(dds,mm)
+stress <- as.data.frame(topTags(glmQLFTest(fit, c("TimePoint45min","RegiondHC:TimePoint45min")), Inf))
+propAny <- as.data.frame(topTags(glmQLFTest(fit, grep("Group",colnames(mm),value=TRUE)), Inf))
+propAny2 <- as.data.frame(topTags(glmQLFTest(fit, setdiff(grep("Group",colnames(mm),value=TRUE),"GroupPropranolol")), Inf))
+prop <- as.data.frame(topTags(glmQLFTest(fit, "GroupPropranolol:TimePoint45min"), Inf))
+propFem <- as.data.frame(topTags(glmQLFTest(fit, "SexFemale:GroupPropranolol:TimePoint45min"), Inf))
+propFem$logFC2 <- propFem$logFC+prop[row.names(propFem),"logFC"]
+rowData(se)$DEA.stress <- stress[row.names(se),]
+rowData(se)$DEA.sex <- as.data.frame(topTags(glmQLFTest(fit, c("SexFemale")), Inf))[row.names(se),]
+rowData(se)$DEA.propranololAny <- propAny[row.names(se),]
+rowData(se)$DEA.propranololInteraction <- prop[row.names(se),]
+rowData(se)$DEA.propranololInteractionFemales <- propFem[row.names(se),]
+```
+
+
+```{r}
+prop <- readRDS("/mnt/bohacek/Lukas/Github/LC_Opto_Trancriptomics/final_data/propInteractions.rds")
+degs <- row.names(topTags(prop$combined, n=Inf, p=0.05))
+```
+
+```{r}
+se$Condition <- se$TimePoint
+levels(se$Condition) <- c("Control", "Stress")
+levels(se$Group) <- c("Vehicle","Propranolol")
+metadata(se)$default_view <- list(assay = "scaledLFC", groupvar = "Group", colvar="TimePoint", gridvar = "Region",
+                                  top_annotation=c("Region","Group","TimePoint","Sex"))
+metadata(se)$anno_colors <- list(
+               Condition=c(  "Control"="peachpuff",
+                             "Stress"="indianred1"),
+               Group=c( Vehicle="lightsteelblue1",
+                        Propranolol="steelblue" ),
+               Sex=c(Male="grey25", Female="darkseagreen"),
+               Region=c(dHC="grey19", vHC="sandybrown"))
+metadata(se)$hmcols <- c("royalblue","white","firebrick4")
+saveRDS(se, "propranolol.mergedRegions.SE.rds")
+```
+
+
+```{r, fig.height=7, fig.width=6}
+pdf("../Figures R/FigS1_vHC_dHC.pdf", width=6, height=7)
+draw(sechm(se[,order(se$TimePoint, se$Group, se$Sex)], degs, gaps_at="Region", do.scale=TRUE,
+      assayName="scaledLFC", row_title="Propranolol-sensitive stress genes", breaks=0.985,
+      top_annotation=c("Group","Condition","Sex"), row_names_gp=gpar(fontsize=9), show_rownames=TRUE,
+      heatmap_legend_param = list(legend_height = unit(6, "cm")), name="Normalized\nresponse")
+     , merge=TRUE)
+dev.off()
+```
+
