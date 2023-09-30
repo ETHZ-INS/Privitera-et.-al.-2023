@@ -13,6 +13,26 @@ library(ggplot2)
 library(sechm)
 ```
 
+```{r}
+prepSE <- function(se){
+   se$Condition <- se$TimePoint
+   levels(se$Condition) <- c("Control", "Stress")
+   se$Group <- as.factor(se$Group)
+   levels(se$Group) <- c("Vehicle","Propranolol")
+   metadata(se)$default_view <- list(assay = "scaledLFC", groupvar = "Group", colvar="TimePoint", gridvar = "Region",
+                                     top_annotation=c("Region","Group","TimePoint","Sex"))
+   metadata(se)$anno_colors <- list(
+                  Condition=c(  "Control"="peachpuff",
+                                "Stress"="indianred1"),
+                  Group=c( Vehicle="lightsteelblue1",
+                           Propranolol="steelblue" ),
+                  Sex=c(Male="grey25", Female="darkseagreen"),
+                  Region=c(dHC="grey19", vHC="sandybrown"))
+   metadata(se)$hmcols <- c("royalblue","white","firebrick4")
+   se
+}
+```
+
 
 # Propanolol Dorsal/ventral
 
@@ -48,62 +68,159 @@ se$Sex <- factor(se$Sex, c("Male","Female"))
 mm <- model.matrix(~Sex+Region*Group*TimePoint, data=as.data.frame(colData(se)))
 se <- se[filterByExpr(se,mm,mincount=20),]
 set.seed(1234)
-se <- svacor(se, ~Region*Sex*TimePoint, ~Region, n.sv=3)
+se <- svacor(se, ~Region*Sex*Group*TimePoint, ~Region, n.sv=3)
 se <- sechm::log2FC(se, "corrected", controls=se$TimePoint=="0min" & se$Group=="PBS", by=se$Region, isLog = TRUE)
 ```
 
+## Dorsal only analysis
 
 ```{r}
+str2.d <- str2[,str2$Region=="dHC"]
+i <- intersect(row.names(dh),row.names(str2.d))
+se <- SummarizedExperiment(list(counts=cbind(assay(dh)[i,],assay(str2.d)[i,])),
+                           colData=rbind(colData(dh)[,c("Region","Sex","Group","TimePoint","Experiment")],
+                                         colData(str2.d)[,c("Region","Sex","Group","TimePoint","Experiment")]))
+se$Region <- factor(se$Region, c("vHC","dHC"))
+se$Sex <- factor(se$Sex, c("Male","Female"))
+mm <- model.matrix(~Experiment+Sex+Group*TimePoint, ~Experiment, data=as.data.frame(colData(se)))
+se <- se[filterByExpr(se,mm,mincount=20),]
+set.seed(1234)
+se <- svacor(se, ~Experiment+Sex*Group*TimePoint, ~Experiment, n.sv=1)
+se <- sechm::log2FC(se, "corrected", controls=se$TimePoint=="0min" & se$Group=="PBS", isLog = TRUE)
+
 dds <- calcNormFactors(DGEList(assay(se)))
-mm <- model.matrix(~Region*Sex*TimePoint*Group, data=as.data.frame(colData(se)))
-dds <- dds[filterByExpr(dds,mm,min.count=20),]
-mm <- model.matrix(~SV1+SV2+SV3+Region+Sex*Group*TimePoint+Region*Group*TimePoint+Region:Sex, data=as.data.frame(colData(se)))
+mm <- model.matrix(~Experiment+SV1+Sex+Sex:Group+Sex:TimePoint+TimePoint*Group, data=as.data.frame(colData(se)))
 dds <- estimateDisp(dds, mm)
 fit <- glmQLFit(dds,mm)
-stress <- as.data.frame(topTags(glmQLFTest(fit, c("TimePoint45min","RegiondHC:TimePoint45min")), Inf))
-propAny <- as.data.frame(topTags(glmQLFTest(fit, grep("Group",colnames(mm),value=TRUE)), Inf))
-propAny2 <- as.data.frame(topTags(glmQLFTest(fit, setdiff(grep("Group",colnames(mm),value=TRUE),"GroupPropranolol")), Inf))
+stress <- as.data.frame(topTags(glmQLFTest(fit, c("TimePoint45min")), Inf))
 prop <- as.data.frame(topTags(glmQLFTest(fit, "GroupPropranolol:TimePoint45min"), Inf))
-propFem <- as.data.frame(topTags(glmQLFTest(fit, "SexFemale:GroupPropranolol:TimePoint45min"), Inf))
-propFem$logFC2 <- propFem$logFC+prop[row.names(propFem),"logFC"]
+prop2 <- as.data.frame(topTags(glmQLFTest(fit[row.names(stress)[which(stress$FDR<0.025)],], "GroupPropranolol:TimePoint45min"), Inf))
 rowData(se)$DEA.stress <- stress[row.names(se),]
-rowData(se)$DEA.sex <- as.data.frame(topTags(glmQLFTest(fit, c("SexFemale")), Inf))[row.names(se),]
-rowData(se)$DEA.propranololAny <- propAny[row.names(se),]
 rowData(se)$DEA.propranololInteraction <- prop[row.names(se),]
-rowData(se)$DEA.propranololInteractionFemales <- propFem[row.names(se),]
+se.d <- prepSE(se[,order(se$TimePoint, se$Group, se$Sex)])
+
+degs.d <- row.names(prop2)[prop2$FDR<0.03]
+h.d <- sechm(se.d, degs.d, gaps_at="Region", do.scale=TRUE, show_rownames = TRUE, breaks=0.985,
+      assayName="scaledLFC", #row_title="Propranolol-sensitive stress genes in dHC", 
+      top_annotation=c("Region","Condition","Group","Sex"), row_names_gp=gpar(fontsize=8), 
+      heatmap_legend_param = list(legend_height = unit(4, "cm")), name="Normalized\nresponse")
 ```
 
 
+## Ventral only
+
+
 ```{r}
+str2.v <- str2[,str2$Region=="vHC"]
+i <- intersect(row.names(vh),row.names(str2.d))
+se <- SummarizedExperiment(list(counts=cbind(assay(vh)[i,],assay(str2.v)[i,])),
+                           colData=rbind(colData(vh)[,c("Region","Sex","Group","TimePoint","Experiment")],
+                                         colData(str2.v)[,c("Region","Sex","Group","TimePoint","Experiment")]))
+se$Region <- factor(se$Region, c("vHC","dHC"))
+se$Sex <- factor(se$Sex, c("Male","Female"))
+mm <- model.matrix(~Experiment+Sex+Group*TimePoint, ~Experiment, data=as.data.frame(colData(se)))
+se <- se[filterByExpr(se,mm,mincount=20),]
+set.seed(1234)
+se <- svacor(se, ~Experiment+Sex*Group*TimePoint, ~Experiment, n.sv=2)
+se <- sechm::log2FC(se, "corrected", controls=se$TimePoint=="0min" & se$Group=="PBS", isLog = TRUE)
+se.v <- prepSE(se)
+se.v <- se.v[,order(se.v$TimePoint, se.v$Group, se.v$Sex)]
+
+dds <- calcNormFactors(DGEList(assay(se)))
+mm <- model.matrix(~Experiment+SV1+SV2+Sex+TimePoint*Group, data=as.data.frame(colData(se)))
+dds <- estimateDisp(dds, mm)
+fit <- glmQLFit(dds,mm)
+stress <- as.data.frame(topTags(glmQLFTest(fit, c("TimePoint45min")), Inf))
+prop <- as.data.frame(topTags(glmQLFTest(fit, "TimePoint45min:GroupPropranolol"), Inf))
+prop2 <- as.data.frame(topTags(glmQLFTest(fit[row.names(stress)[which(stress$FDR<0.05)],], "TimePoint45min:GroupPropranolol"), Inf))
+rowData(se)$DEA.stress <- stress[row.names(se),]
+rowData(se)$DEA.propranololInteraction <- prop[row.names(se),]
+se.v <- prepSE(se[,order(se$TimePoint, se$Group, se$Sex)])
+
 prop <- readRDS("/mnt/bohacek/Lukas/Github/LC_Opto_Trancriptomics/final_data/propInteractions.rds")
-degs <- row.names(topTags(prop$combined, n=Inf, p=0.05))
+degs.v <- row.names(topTags(prop$combined,p.value = 0.05,n=Inf))
+
+h.v <- sechm(se.v, degs.v, gaps_at="Region", do.scale=TRUE, show_rownames = TRUE, breaks=0.985,
+      assayName="scaledLFC", #row_title="Propranolol-sensitive stress genes in vHC",
+      top_annotation=c("Region","Condition","Group","Sex"), row_names_gp=gpar(fontsize=8), 
+      heatmap_legend_param = list(legend_height = unit(4, "cm")), name="Normalized\nresponse")
+```
+
+```{r, fig.width=8, fig.height=7}
+pdf("../Figures R/Fig1h.pdf", width=8, height=7)
+cowplot::plot_grid(nrow=1, labels=c("h","i"), rel_widths = c(4.1,5), scale=0.95,
+   grid.grabExpr(draw(h.d, show_heatmap_legend = FALSE, show_annotation_legend = FALSE)),
+   grid.grabExpr(draw(h.v, merge=TRUE)))
+dev.off()
+```
+
+## Comparison of their interaction terms
+
+```{r}
+m <- merge(rowData(se.d)$DEA.propranololInteraction, topTags(prop$combined,n=Inf), by="row.names", suffix=c(".dorsal",".ventral"))
+m <- m[m$FDR.dorsal<0.05 | m$FDR.ventral<0.05,]
+m <- m[order(m$logFC.ventral),]
+m$gene <- factor(m$Row.names,m$Row.names)
+m2 <- reshape2:::melt.data.frame(m, c("gene"), measure.vars = c("logFC.dorsal","logFC.ventral"))
+m2$variable <- factor(m2$variable)
+levels(m2$variable) <- c("dHC","vHC")
+
+p1 <- ggplot(m2, aes(gene, value, colour=variable)) + 
+   geom_hline(yintercept=0, linetype="dashed", colour="gray") + 
+   geom_point() + theme_bw() + scale_colour_manual(values = c(dHC="grey19", vHC="sandybrown")) +
+   theme(axis.text.x = element_text(angle=90, hjust=1, vjust=0.5)) +
+   labs(y="Interaction effect strength (logFC)", x="Genes sorted by interaction effect in vHC")
+```
+
+### Comparison of the proportion of the stress response repressed for each gene
+
+```{r}
+dea1 <- rowData(se.d)$DEA.propranololInteraction
+dea1$stress.logFC <- rowData(se.d)$DEA.stress$logFC
+dea1 <- dea1[m$Row.names,]
+dea1$rep.d <- pmin(1,(2^(dea1$stress.logFC+dea1$logFC)/2^dea1$stress.logFC))
+
+dea2 <- rowData(se.v)$DEA.propranololInteraction
+dea2$stress.logFC <- rowData(se.v)$DEA.stress$logFC
+dea2 <- dea2[m$Row.names,]
+dea2$rep.d <- pmin(1,(2^(dea2$stress.logFC+dea2$logFC)/2^dea2$stress.logFC))
+
+m2 <- merge(dea1,dea2,by="row.names")
+ggplot(m2, aes(rep.d.x,rep.d.y)) + geom_abline(slope=1, linetype="dashed") + geom_point() +
+   labs(x="Proportion repressed - ventral", y="Proportion repressed - dorsal") +
+   ylim(0,1) + xlim(0,1)
+```
+
+# Merged heatmap
+
+```{r, fig.height=8, fig.width=6}
+se <- mergeSEs(list(ventral=se.v, dorsal=se.d), do.scale = FALSE, keepRowData = FALSE)
+degs <- union(degs.d, degs.v)
+metadata(se) <- metadata(se.v)
+se$Experiment <- as.factor(se$Experiment)
+levels(se$Experiment) <- c("E2","E1","E2")
+metadata(se)$anno_colors$Experiment <- c("E1"="#4e526d", "E2"="#dbce81")
+se <- se[,order(se$Region)]
+pdf("../Figures R/revised_SF1d.pdf", width=6, height=8)
+draw(sechm(se, degs, gaps_at="Region", do.scale=TRUE, show_rownames = TRUE,
+      assayName="scaledLFC", row_title="Union of vHC/dHC Propranolol-sensitive stress genes", breaks=0.985,
+      top_annotation=c("Region","Experiment","Condition","Group","Sex"), row_names_gp=gpar(fontsize=8), 
+      heatmap_legend_param = list(legend_height = unit(4, "cm")), name="Normalized\nresponse"),
+     merge=TRUE)
+dev.off()
 ```
 
 ```{r}
-se$Condition <- se$TimePoint
-levels(se$Condition) <- c("Control", "Stress")
-levels(se$Group) <- c("Vehicle","Propranolol")
-metadata(se)$default_view <- list(assay = "scaledLFC", groupvar = "Group", colvar="TimePoint", gridvar = "Region",
-                                  top_annotation=c("Region","Group","TimePoint","Sex"))
-metadata(se)$anno_colors <- list(
-               Condition=c(  "Control"="peachpuff",
-                             "Stress"="indianred1"),
-               Group=c( Vehicle="lightsteelblue1",
-                        Propranolol="steelblue" ),
-               Sex=c(Male="grey25", Female="darkseagreen"),
-               Region=c(dHC="grey19", vHC="sandybrown"))
-metadata(se)$hmcols <- c("royalblue","white","firebrick4")
-saveRDS(se, "propranolol.mergedRegions.SE.rds")
+rowData(se)$DEA.vHC.stress <- rowData(se.v)$DEA.stress[row.names(se),]
+rowData(se)$DEA.vHC.propranololInteraction <- rowData(se.v)$DEA.propranololInteraction[row.names(se),]
+rowData(se)$DEA.dHC.stress <- rowData(se.d)$DEA.stress[row.names(se),]
+rowData(se)$DEA.dHC.propranololInteraction <- rowData(se.d)$DEA.propranololInteraction[row.names(se),]
+metadata(se)$feature.lists <- list(unionPropSensitiveStressGenes=degs)
+metadata(se)$description <- "Merged vHC/dHC datasets from Mattia's propranolol experiments"
+saveRDS(se, file="/mnt/bohacek/SEs_for_SEV/FST_propranolol_merged.SE.rds")
 ```
 
-
-```{r, fig.height=7, fig.width=6}
-pdf("../Figures R/FigS1_vHC_dHC.pdf", width=6, height=7)
-draw(sechm(se[,order(se$TimePoint, se$Group, se$Sex)], degs, gaps_at="Region", do.scale=TRUE,
-      assayName="scaledLFC", row_title="Propranolol-sensitive stress genes", breaks=0.985,
-      top_annotation=c("Group","Condition","Sex"), row_names_gp=gpar(fontsize=9), show_rownames=TRUE,
-      heatmap_legend_param = list(legend_height = unit(6, "cm")), name="Normalized\nresponse")
-     , merge=TRUE)
-dev.off()
+```{r}
+sessionInfo()
 ```
 

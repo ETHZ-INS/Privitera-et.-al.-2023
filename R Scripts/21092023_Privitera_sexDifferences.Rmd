@@ -5,7 +5,6 @@ date: "9/21/2023"
 output: html_document
 ---
 
-decision: do the interaction in vHC, report absence of significance --> show nothing?
 
 ```{r, echo=FALSE}
 library(edgeR)
@@ -13,13 +12,42 @@ library(SummarizedExperiment)
 library(SEtools)
 library(ggplot2)
 library(sechm)
+
+cs <- function(x) x + scale_color_manual(values=c(males="grey25", females="darkseagreen",Males="grey25", Females="darkseagreen")) + labs(color="Sex")
 ```
 
 
 ```{r}
-intLfcComp <- function(dea1, dea.int, fdr.th=0.05, int.fdr.th=fdr.th, ..., SE=TRUE, allSeg=FALSE,
-                       lfc.th=log2(1.2), groups=c("Females","Males"), genes=NULL, segAlpha=0.5, genesAsX=FALSE,
-                       do.plot=TRUE, fade=TRUE, includeLabels=TRUE, ylab="log2(FC) upon stress"){
+#' Interaction logFC plot
+#'
+#' @param dea1 DEA data.frame for the main effect (e.g. stress)
+#' @param dea.int DEA data.frame for the interaction (e.g. sex:stress)
+#' @param fdr.th Threshold for significance for the main analysis
+#' @param int.fdr.th Threshold for significance for the interactions (defaults 
+#'   to `fdr.th`)
+#' @param lfc.th Absolute logFC threshold
+#' @param ... Passed to `geom_point()`
+#' @param SE Whether to plot the standard error of the coefficients (only 
+#'   available with DESeq2 DEAs
+#' @param allSeg Show segments for all genes, rather than just for significant
+#'   interactions
+#' @param do.plot Whether to create the plot; if FALSE, returns the data.frame
+#' @param groups The labels of the levels for the interacting variables
+#' @param genes Which genes to plot (overrides the significance selection)
+#' @param segAlpha Alpha transparency for the segments
+#' @param genesAsX Logical; whether to show the gene names on the x axis, rather
+#'   than just the ranks
+#' @param fade Logical, whether to fade points whose interaction isn't significant
+#' @param includeLabels Logical, whether to label genes with significant interaction
+#' @param ylab y axis label
+#'
+#' @return a ggplot
+#' @author Pierre-Luc Germain
+#' @export
+intLfcComp <- function(dea1, dea.int, fdr.th=0.05, int.fdr.th=fdr.th, ..., 
+                       lfc.th=log2(1.2), SE=TRUE, allSeg=FALSE, do.plot=TRUE,
+                       groups=c("Females","Males"), genes=NULL, segAlpha=0.5, genesAsX=FALSE,
+                       fade=TRUE, includeLabels=TRUE, ylab="log2(FC) upon stress"){
   dea1 <- sechm:::homogenizeDEA(dea1)
   dea.int <- sechm:::homogenizeDEA(dea.int)
   dea.int$logFC[is.na(dea.int$logFC)] <- 0
@@ -34,12 +62,12 @@ intLfcComp <- function(dea1, dea.int, fdr.th=0.05, int.fdr.th=fdr.th, ..., SE=TR
   stress2 <- dea1[genes,]
   stress2$midlfc <- (stress2$logFC2+stress2$logFC)/2
   stress2$rank <- rank(stress2$logFC2+stress2$logFC)
-  stress2$rank2 <- (rank(stress2$logFC2)+rank(stress2$#' @param coefs The interaction coefficients to test (default all)
-logFC))/2
+  stress2$rank2 <- (rank(stress2$logFC2)+rank(stress2$logFC))/2
   stress2 <- stress2[order(stress2$rank),]
   stress2$gene <- factor(row.names(stress2), row.names(stress2))
   stress2$flag <- (stress2$int.FDR<int.fdr.th & abs(stress2$int.logFC)>lfc.th)
   w2 <- w <- which(stress2$flag)
+  if(genesAsX) stress2$rank <- stress2$gene
   stress3 <- reshape::melt.data.frame(stress2, measure.vars=c("logFC","logFC2"),
                       id.vars = c("gene","rank","rank2","int.FDR","FDR","flag"))
   stress3$variable <- factor(stress3$variable)
@@ -48,8 +76,6 @@ logFC))/2
   if(!do.plot) return(list(df2=stress2, df3=stress3))
   if(fade){
     p <- ggplot(stress3, aes(rank, value, colour=variable, alpha=-log10(int.FDR)))
-  }else if(genesAsX){
-    p <- ggplot(stress3, aes(gene, value, colour=variable))
   }else{
     p <- ggplot(stress3, aes(rank, value, colour=variable))
   }
@@ -65,7 +91,8 @@ logFC))/2
   if(allSeg) w2 <- seq_len(nrow(stress2))
   p <- p + geom_segment(data=stress2[w2,], aes(x=rank, xend=rank, y=logFC, yend=logFC2),
                         alpha=segAlpha, colour="black") + 
-    geom_point(...) + labs(x="Rank of average logFC", y=ylab)
+    geom_point(...) + labs(x=ifelse(genesAsX, "Genes ranked by average logFC",
+                                    "Rank of average logFC"), y=ylab)
   if(!includeLabels) return(p)
   p <- p +
     ggrepel::geom_text_repel(data=stress2[w,], aes(rank, midlfc, label=gene), 
@@ -132,6 +159,7 @@ rowData(mse)$DEA.TimePoint45min <- stress[row.names(mse),]
 rowData(mse)$DEA.Sex <- sex[row.names(mse),]
 rowData(mse)$DEA.interaction <- as.data.frame(topTags(glmQLFTest(fit, "SexFemale:TimePoint45min"), Inf))[row.names(mse),]
 saveRDS(mse, file="vhc_sex.SE.rds")
+mse <- readRDS("vhc_sex.SE.rds")
 ```
 
 
@@ -149,9 +177,11 @@ prop <- readRDS("/mnt/bohacek/Lukas/Github/LC_Opto_Trancriptomics/final_data/pro
 propDegs <- row.names(topTags(prop$combined, n=Inf, p=0.05))
 g <- intersect(propDegs,row.names(mse))
 p1 <- intLfcComp(getDEA(mse, "TimePoint45min"),
-           getDEA(mse, "interaction"), genes=g, allSeg=TRUE,
+           getDEA(mse, "interaction"), genes=g, allSeg=TRUE, genesAsX = TRUE,
            int.fdr.th=0.05, lfc.th=log2(1.1), fdr.th = 0.05, groups=c("Males","Females"), fade=FALSE) + 
-  scale_x_continuous(breaks=seq_along(g), labels=g) + theme_bw() + theme(axis.text.x = element_text(angle=90, hjust=1, vjust=0.5)) + ggtitle("Propranolol-sensitive stress genes")
+  theme_bw() + theme(axis.text.x = element_text(angle=90, hjust=1, vjust=0.5)) + 
+  labs(x="Propranolol-sensitive stress genes", y="log2(FC) upon stress")
+p1
 ```
 
 
@@ -165,24 +195,30 @@ int <- lfcShrink(dds, coef="SexFemale.TimePoint45min")
 int2 <- int[row.names(stress)[stress$padj<0.01],]
 int2$FDR <- p.adjust(int2$padj)
 p2 <- intLfcComp(stress, int, int.fdr.th=0.05, lfc.th=log2(1.0), fdr.th = 0.01, groups=c("males","females"), fade=FALSE, size=1) + 
-  theme_bw() + ggtitle("All stress-responsive genes, using apeglm logFC shrinkage")
+  theme_bw()# + ggtitle("All stress-responsive genes, using apeglm logFC shrinkage")
 ```
 
 
 
-```{r}
+```{r, fig.width=5.5, fig.height=4}
 mse2 <- readRDS("propranolol.mergedRegions.SE.rds")
-p3 <- intLfcComp(getDEA(mse2, "propranololInteraction"), getDEA(mse2, "propranololInteractionFemales"), genes=propDegs, allSeg=TRUE, int.fdr.th=0.05, lfc.th=0.05, fdr.th = 0.05, groups=c("males","females"), fade=FALSE, segAlpha = 0.3) + 
-  theme_bw() + ylab("Stress:Propranolol interaction log2(FC)") + scale_x_continuous(breaks=seq_along(g), labels=g) + theme(axis.text.x = element_text(angle=90, hjust=1, vjust=0.5)) + ggtitle("Propranolol-sensitive stress genes")
+p3 <- intLfcComp(getDEA(mse2, "propranololInteraction"), getDEA(mse2, "propranololInteractionFemales"), genes=propDegs, allSeg=TRUE, int.fdr.th=0.05, lfc.th=0.05, fdr.th = 0.05, groups=c("males","females"), fade=FALSE, segAlpha = 0.3, genesAsX = TRUE) + 
+  theme_bw() + theme(axis.text.x = element_text(size=8, angle=90, hjust=1, vjust=0.5)) +
+  labs(x="Propranolol-sensitive stress genes", y="Stress:Propranolol interaction log2(FC)") +
+  theme(legend.position = c(0.1, 0.86))
+cs(p3)
+pdf("../Figures R/revised_F1h.pdf", width = 5.5, height=4)
+cs(p3)
+dev.off()
 ```
 
-```{r, fig.height=11, fig.width=7}
-pdf("../Figures R/sexDiff.pdf", width=7, height=11)
-cs <- function(x) x + scale_color_manual(values=c(males="grey25", females="darkseagreen",Males="grey25", Females="darkseagreen")) + labs(color="Sex")
-cowplot::plot_grid(cs(p2)+theme_bw()+guides(colour = guide_legend(override.aes = list(size=3))),
+```{r, fig.height=5, fig.width=5.5}
+pdf("../Figures R/sexDiff.pdf", width=5.5, height=5)
+cowplot::plot_grid(cs(p2)+theme_bw()+guides(colour = guide_legend(override.aes = list(size=3)))+
+                     theme(legend.position = c(0.1, 0.75)),
                    cs(p1) + theme_bw() + 
-                     theme(axis.text.x = element_text(angle=90, hjust=1, vjust=0.5), legend.position = "none"), 
-                   cs(p3) + theme(legend.position = "none"), nrow=3,labels="auto",scale=0.95)
+                     theme(axis.text.x = element_text(size=8, angle=90, hjust=1, vjust=0.5), legend.position = "none"), 
+                   nrow=2,scale=0.95)
 dev.off()
 ```
 
