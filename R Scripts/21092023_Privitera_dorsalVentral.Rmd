@@ -102,7 +102,7 @@ se.d <- prepSE(se[,order(se$TimePoint, se$Group, se$Sex)])
 degs.d <- row.names(prop2)[prop2$FDR<0.03]
 h.d <- sechm(se.d, degs.d, gaps_at="Region", do.scale=TRUE, show_rownames = TRUE, breaks=0.985,
       assayName="scaledLFC", #row_title="Propranolol-sensitive stress genes in dHC", 
-      top_annotation=c("Region","Condition","Group","Sex"), row_names_gp=gpar(fontsize=8), 
+      top_annotation=c("Region","Condition","Group","Sex"), row_names_gp=gpar(fontsize=8.4), 
       heatmap_legend_param = list(legend_height = unit(4, "cm")), name="Normalized\nresponse")
 ```
 
@@ -142,13 +142,13 @@ degs.v <- row.names(topTags(prop$combined,p.value = 0.05,n=Inf))
 
 h.v <- sechm(se.v, degs.v, gaps_at="Region", do.scale=TRUE, show_rownames = TRUE, breaks=0.985,
       assayName="scaledLFC", #row_title="Propranolol-sensitive stress genes in vHC",
-      top_annotation=c("Region","Condition","Group","Sex"), row_names_gp=gpar(fontsize=8), 
-      heatmap_legend_param = list(legend_height = unit(4, "cm")), name="Normalized\nresponse")
+      top_annotation=c("Region","Condition","Group","Sex"), row_names_gp=gpar(fontsize=8.5), 
+      heatmap_legend_param = list(legend_height = unit(5, "cm")), name="Normalized\nresponse")
 ```
 
-```{r, fig.width=8, fig.height=7}
-pdf("../Figures R/Fig1h.pdf", width=8, height=7)
-cowplot::plot_grid(nrow=1, labels=c("h","i"), rel_widths = c(4.1,5), scale=0.95,
+```{r, fig.width=7, fig.height=7.6}
+pdf("../Figures R/Fig1h.pdf", width=7, height=7.6)
+cowplot::plot_grid(nrow=1, rel_widths = c(4.1,5), scale=0.95,
    grid.grabExpr(draw(h.d, show_heatmap_legend = FALSE, show_annotation_legend = FALSE)),
    grid.grabExpr(draw(h.v, merge=TRUE)))
 dev.off()
@@ -193,7 +193,7 @@ ggplot(m2, aes(rep.d.x,rep.d.y)) + geom_abline(slope=1, linetype="dashed") + geo
 
 # Merged heatmap
 
-```{r, fig.height=8, fig.width=6}
+```{r, fig.height=9, fig.width=6}
 se <- mergeSEs(list(ventral=se.v, dorsal=se.d), do.scale = FALSE, keepRowData = FALSE)
 degs <- union(degs.d, degs.v)
 metadata(se) <- metadata(se.v)
@@ -201,7 +201,7 @@ se$Experiment <- as.factor(se$Experiment)
 levels(se$Experiment) <- c("E2","E1","E2")
 metadata(se)$anno_colors$Experiment <- c("E1"="#4e526d", "E2"="#dbce81")
 se <- se[,order(se$Region)]
-pdf("../Figures R/revised_SF1d.pdf", width=6, height=8)
+pdf("../Figures R/revised_SF1d.pdf", width=6, height=10)
 draw(sechm(se, degs, gaps_at="Region", do.scale=TRUE, show_rownames = TRUE,
       assayName="scaledLFC", row_title="Union of vHC/dHC Propranolol-sensitive stress genes", breaks=0.985,
       top_annotation=c("Region","Experiment","Condition","Group","Sex"), row_names_gp=gpar(fontsize=8), 

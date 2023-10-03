@@ -152,6 +152,7 @@ dds <- estimateDisp(dds,mm)
 fit <- glmQLFit(dds,mm)
 stress <- as.data.frame(topTags(glmQLFTest(fit, "TimePoint45min"), Inf))
 sdegs <- row.names(stress)[which(stress$FDR<0.05)]
+int0 <- as.data.frame(topTags(glmQLFTest(fit, "SexFemale:TimePoint45min"), Inf))
 int1 <- as.data.frame(topTags(glmQLFTest(fit[sdegs,], "SexFemale:TimePoint45min"), Inf))
 head(int1)
 sex <- as.data.frame(topTags(glmQLFTest(fit, "SexFemale"),Inf))
@@ -173,13 +174,15 @@ intLfcComp(getDEA(mse, "TimePoint45min"),
 
 
 ```{r}
-prop <- readRDS("/mnt/bohacek/Lukas/Github/LC_Opto_Trancriptomics/final_data/propInteractions.rds")
-propDegs <- row.names(topTags(prop$combined, n=Inf, p=0.05))
+finalSE <- readRDS("/mnt/bohacek/SEs_for_SEV/FST_propranolol_merged.SE.rds")
+propDegs <- metadata(finalSE)$feature.lists$unionPropSensitiveStressGenes
+# prop <- readRDS("/mnt/bohacek/Lukas/Github/LC_Opto_Trancriptomics/final_data/propInteractions.rds")
+# propDegs <- row.names(topTags(prop$combined, n=Inf, p=0.05))
 g <- intersect(propDegs,row.names(mse))
 p1 <- intLfcComp(getDEA(mse, "TimePoint45min"),
            getDEA(mse, "interaction"), genes=g, allSeg=TRUE, genesAsX = TRUE,
            int.fdr.th=0.05, lfc.th=log2(1.1), fdr.th = 0.05, groups=c("Males","Females"), fade=FALSE) + 
-  theme_bw() + theme(axis.text.x = element_text(angle=90, hjust=1, vjust=0.5)) + 
+  theme_bw() + theme(axis.text.x = element_text(size=8, angle=90, hjust=1, vjust=0.5)) + 
   labs(x="Propranolol-sensitive stress genes", y="log2(FC) upon stress")
 p1
 ```
@@ -198,28 +201,128 @@ p2 <- intLfcComp(stress, int, int.fdr.th=0.05, lfc.th=log2(1.0), fdr.th = 0.01, 
   theme_bw()# + ggtitle("All stress-responsive genes, using apeglm logFC shrinkage")
 ```
 
+Save the merged interaction table for supplementaries:
+
+```{r}
+mi <- merge(int0, as.data.frame(int), by="row.names")
+mi$edgeR.interaction.logFC <- mi$logFC
+mi$DESeq2.interaction.logFC <- mi$log2FoldChange
+mi$DESeq2.interaction.logFC.stdErr <- mi$lfcSE
+mi$edgeR.interaction.PValue <- mi$PValue
+mi$DESeq2.interaction.PValue <- mi$pvalue
+mi$edgeR.interaction.FDR <- mi$FDR
+mi$DESeq2.interaction.Padj <- mi$padj
+mi$meanFDR <- (mi$FDR+mi$padj)/2
+
+mi <- mi[,c(1,3,12:19)]
+mi <- mi[order(mi$meanFDR, mi$DESeq2.interaction.PValue),]
+colnames(mi)[1] <- "Gene"
+mi2 <- plgINS::dround(mi,roundGreaterThan1 = TRUE)
+openxlsx::write.xlsx(mi2, "sexInteraction.metaAnalysis.xlsx")
+```
+
 
 
 ```{r, fig.width=5.5, fig.height=4}
-mse2 <- readRDS("propranolol.mergedRegions.SE.rds")
+# NB: here the same mice are used for dHC and vHC, so caution in interpreting the results of a merged analysis
+mse2 <- readRDS("/mnt/bohacek/SEs_for_SEV/FST_propranolol_merged.SE.rds")
+set.seed(1234)
+mse2 <- svacor(mse2, ~Sex+Region+Experiment+Group:Region+Sex*Group*TimePoint+TimePoint:Region, ~Experiment+Region, n.sv=2)
+mse2 <- log2FC(mse2, "corrected", mse2$Condition=="Control" & mse2$Group=="Vehicle", by = mse2$Region)
+mm <- model.matrix(~SV1+SV2+Sex+Region+Experiment+Group:Region+Sex*Group*TimePoint+TimePoint:Region,
+                   data=as.data.frame(colData(mse2)))
+dds <- calcNormFactors(DGEList(assays(mse2)$counts))
+dds <- estimateDisp(dds,mm)
+dds <- dds[filterByExpr(dds,mm,min.count=20),]
+mse2 <- mse2[row.names(dds),]
+assays(mse2)$logcpm <- log1p(cpm(dds))
+fit <- glmQLFit(dds,mm)
+stress <- as.data.frame(topTags(glmQLFTest(fit, c("TimePoint45min","SexFemale:TimePoint45min","RegiondHC:TimePoint45min")), Inf))
+prop <- as.data.frame(topTags(glmQLFTest(fit, "GroupPropranolol:TimePoint45min"), Inf))
+prop2 <- as.data.frame(topTags(glmQLFTest(fit[row.names(stress)[which(stress$FDR<0.05)],], 
+                                          "GroupPropranolol:TimePoint45min"), Inf))
+propFem2 <- as.data.frame(topTags(glmQLFTest(fit[propDegs,], "SexFemale:GroupPropranolol:TimePoint45min"), Inf))
+propFem <- as.data.frame(topTags(glmQLFTest(fit, "SexFemale:GroupPropranolol:TimePoint45min"), Inf))
+rowData(mse2)$DEA.stress <- stress[row.names(mse2),]
+rowData(mse2)$DEA.propranololInteraction <- prop[row.names(mse2),]
+rowData(mse2)$DEA.propranololInteractionFemales <- propFem[row.names(mse2),]
+```
+
+
+```{r, fig.width=6, fig.height=4}
 p3 <- intLfcComp(getDEA(mse2, "propranololInteraction"), getDEA(mse2, "propranololInteractionFemales"), genes=propDegs, allSeg=TRUE, int.fdr.th=0.05, lfc.th=0.05, fdr.th = 0.05, groups=c("males","females"), fade=FALSE, segAlpha = 0.3, genesAsX = TRUE) + 
-  theme_bw() + theme(axis.text.x = element_text(size=8, angle=90, hjust=1, vjust=0.5)) +
+  theme_bw() + theme(axis.text.x = element_text(size=6, angle=90, hjust=1, vjust=0.5)) +
   labs(x="Propranolol-sensitive stress genes", y="Stress:Propranolol interaction log2(FC)") +
-  theme(legend.position = c(0.1, 0.86))
+  theme(legend.position = c(0.09, 0.85), legend.background = element_rect(fill="transparent"), legend.key = element_rect(fill="transparent")) + guides(colour = guide_legend(override.aes = list(size=3)))
 cs(p3)
-pdf("../Figures R/revised_F1h.pdf", width = 5.5, height=4)
+pdf("../Figures R/revised_F1f.pdf", width = 5.5, height=4)
 cs(p3)
 dev.off()
 ```
 
-```{r, fig.height=5, fig.width=5.5}
-pdf("../Figures R/sexDiff.pdf", width=5.5, height=5)
+Closer look at top 10 candidates:
+
+```{r, fig.width=7, fig.height=4}
+tmp <- propFem2[!is.na(propFem2$logFC),]
+tmp <- tmp[order(-abs(tmp$logFC)),]
+candidates <- row.names(tmp)[1:5]
+draw(sechm(mse2, candidates, top_annotation=c("Region","Experiment","Condition","Group","Sex"), assayName = "log2FC"), merge=TRUE)
+```
+
+
+```{r, fig.width=6, fig.height=2.3}
+mse2$Condition2 <- paste(mse2$Group, mse2$Condition)
+d <- meltSE(mse2, candidates)
+#d <- d[d$Condition2!="Propranolol Control" & d$Region=="vHC",]
+d <- d[d$Condition2!="Propranolol Control",]
+d$Condition2 <- factor(d$Condition2, dput(unique(d$Condition2)), c("Control", "Stress",  "Propranolol\n+stress"))
+ggplot(d[d$Region=="vHC",], aes(Sex, log2FC, fill=Condition2, colour=Condition2)) + geom_boxplot(outlier.size = 0.8) + facet_grid(~feature, scale = "free_y") + theme_bw() +
+  theme(axis.text.x = element_text(angle=45, hjust=1, vjust=1)) + labs(fill="Condition", color="Condition") +
+  scale_fill_manual(values=c("Control"="peachpuff", Stress="#CD5C5C96", "Propranolol\n+stress"="#8B008B64")) +
+  scale_color_manual(values=c("Control"="#caa788", Stress="indianred1", "Propranolol\n+stress"="darkmagenta"))
+
+scp <- ggplot(d[d$Region=="vHC",], aes(Sex, log2FC, colour=Condition2)) + 
+  geom_hline(yintercept=0, linetype="dashed", colour="grey") + 
+  geom_boxplot(outlier.size = 0.7) + facet_wrap(~feature, nrow=1) + theme_bw() + 
+  theme(axis.text.x = element_text(angle=45, hjust=1, vjust=1)) + labs(color="Condition") +
+  scale_color_manual(values=c("Control"="#caa788", Stress="#e93838", tmp="black", "Propranolol\n+stress"="darkmagenta"))
+pdf("../Figures R/FigS1_revised_e.pdf", width=6, height = 2.2)
+scp + theme(axis.title.x = element_blank())
+dev.off()
+```
+
+NB: Ctla2b was excluded due to the filtering criteria... if it were included it would show a trend (upregulated by stress in females only) as previously reported...
+
+
+
+```{r, fig.height=6, fig.width=5.5}
+pdf("../Figures R/sexDiff.pdf", width=5.5, height=6)
 cowplot::plot_grid(cs(p2)+theme_bw()+guides(colour = guide_legend(override.aes = list(size=3)))+
                      theme(legend.position = c(0.1, 0.75)),
                    cs(p1) + theme_bw() + 
                      theme(axis.text.x = element_text(size=8, angle=90, hjust=1, vjust=0.5), legend.position = "none"), 
                    nrow=2,scale=0.95)
 dev.off()
+```
+
+
+
+```{r}
+mse2 <- mse2[,mse2$Region=="vHC"]
+mm <- model.matrix(~SV1+SV2+Sex+Experiment+Sex*Group*TimePoint,
+                   data=as.data.frame(colData(mse2)))
+dds <- calcNormFactors(DGEList(assays(mse2)$counts))
+dds <- estimateDisp(dds,mm)
+dds <- dds[filterByExpr(dds,mm,min.count=20),]
+fit <- glmQLFit(dds,mm)
+stress <- as.data.frame(topTags(glmQLFTest(fit, c("TimePoint45min","SexFemale:TimePoint45min")), Inf))
+propAny <- as.data.frame(topTags(glmQLFTest(fit[row.names(stress)[which(stress$FDR<0.05)],], grep("GroupPropranolol",colnames(mm),value=TRUE)), Inf))
+propF <- as.data.frame(topTags(glmQLFTest(fit, "SexFemale:GroupPropranolol:TimePoint45min"), Inf))
+propF2 <- as.data.frame(topTags(glmQLFTest(fit[row.names(stress)[which(stress$FDR<0.05)],], 
+                                          "SexFemale:GroupPropranolol:TimePoint45min"), Inf))
+propF3 <- as.data.frame(topTags(glmQLFTest(fit[row.names(propAny)[which(propAny$FDR<0.05)],], 
+                                          "SexFemale:GroupPropranolol:TimePoint45min"), Inf))
+
 ```
 
 
