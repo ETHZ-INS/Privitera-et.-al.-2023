@@ -205,6 +205,9 @@ Save the merged interaction table for supplementaries:
 
 ```{r}
 mi <- merge(int0, as.data.frame(int), by="row.names")
+mse <- readRDS("vhc_sex.SE.rds")
+mi$edgeR.stress.logFC <- getDEA(mse)$TimePoint45min[as.character(mi$Row.names),"logFC"]
+mi$edgeR.stress.FDR <- getDEA(mse)$TimePoint45min[as.character(mi$Row.names),"FDR"]
 mi$edgeR.interaction.logFC <- mi$logFC
 mi$DESeq2.interaction.logFC <- mi$log2FoldChange
 mi$DESeq2.interaction.logFC.stdErr <- mi$lfcSE
@@ -213,8 +216,7 @@ mi$DESeq2.interaction.PValue <- mi$pvalue
 mi$edgeR.interaction.FDR <- mi$FDR
 mi$DESeq2.interaction.Padj <- mi$padj
 mi$meanFDR <- (mi$FDR+mi$padj)/2
-
-mi <- mi[,c(1,3,12:19)]
+mi <- mi[,c(1,3,12:21)]
 mi <- mi[order(mi$meanFDR, mi$DESeq2.interaction.PValue),]
 colnames(mi)[1] <- "Gene"
 mi2 <- plgINS::dround(mi,roundGreaterThan1 = TRUE)
